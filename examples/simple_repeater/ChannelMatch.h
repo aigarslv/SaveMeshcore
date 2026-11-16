@@ -18,4 +18,3 @@ bool publicChannelSelfTest();
 
 // "cc310" or "software": which HMAC implementation this build uses.
 const char* publicChannelHmacBackend();
-

@@ -88,4 +88,3 @@ const char* publicChannelHmacBackend() {
   return "software";
 #endif
 }
-
