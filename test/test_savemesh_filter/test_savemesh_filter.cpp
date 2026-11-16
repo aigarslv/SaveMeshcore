@@ -154,6 +154,141 @@ TEST(PublicChannelFilter, RouteDoesNotChangeChannelIdentity) {
   }
 }
 
+// ── Protected command validation ────────────────────────────────────────────
+
+static savemesh::ProtectedCheck check(const char* command, char* canonical, size_t cap = 64) {
+  canonical[0] = 0;
+  return savemesh::checkProtectedSet(command, canonical, cap);
+}
+
+TEST(ProtectedCommands, ParseUnsignedIsStrict) {
+  uint16_t v = 999;
+  EXPECT_TRUE(savemesh::parseUnsigned("0", &v));     EXPECT_EQ(v, 0);
+  EXPECT_TRUE(savemesh::parseUnsigned("168", &v));   EXPECT_EQ(v, 168);
+  EXPECT_TRUE(savemesh::parseUnsigned("65535", &v)); EXPECT_EQ(v, 65535);
+  EXPECT_TRUE(savemesh::parseUnsigned("7  ", &v));   EXPECT_EQ(v, 7);
+  EXPECT_TRUE(savemesh::parseUnsigned("7\r", &v));   EXPECT_EQ(v, 7);   // stray line ending
+  EXPECT_TRUE(savemesh::parseUnsigned("7\t\n", &v)); EXPECT_EQ(v, 7);
+  for (const char* bad : {"", " ", "abc", "-1", "+1", "1x", "1 2", "0x10", "65536", "99999999999999"}) {
+    EXPECT_FALSE(savemesh::parseUnsigned(bad, &v)) << "'" << bad << "'";
+  }
+}
+
+TEST(ProtectedCommands, MatchCommandRequiresWholeWord) {
+  const char* arg = nullptr;
+  EXPECT_TRUE(savemesh::matchCommand("set multi.acks 1", "set multi.acks", &arg));
+  EXPECT_STREQ(arg, "1");
+  EXPECT_TRUE(savemesh::matchCommand("set multi.acks     1", "set multi.acks", &arg));
+  EXPECT_STREQ(arg, "1");
+  EXPECT_TRUE(savemesh::matchCommand("set multi.acks", "set multi.acks", &arg));
+  EXPECT_STREQ(arg, "");
+  EXPECT_FALSE(savemesh::matchCommand("set multi.acksx 1", "set multi.acks", &arg));
+  EXPECT_FALSE(savemesh::matchCommand("xset multi.acks 1", "set multi.acks", &arg));
+  EXPECT_FALSE(savemesh::matchCommand("set multi", "set multi.acks", &arg));
+}
+
+TEST(ProtectedCommands, UnrelatedCommandsAreNotMatched) {
+  char out[64];
+  for (const char* cmd : {"set name Node", "get flood.advert.interval", "set flood.max 10",
+                          "set advert.intervalx 0", "set flood.advert.interval.x 47", "filter data", ""}) {
+    EXPECT_FALSE(check(cmd, out).matched) << cmd;
+  }
+}
+
+TEST(ProtectedCommands, ExtraSpacesNeverChangeTheStoredValue) {
+  // Regression: the stock number parser reads "  47" (two spaces) as 0, which would
+  // silently disable flood adverts. The forwarded command is always rebuilt.
+  char out[64];
+  for (const char* cmd : {"set flood.advert.interval 47", "set flood.advert.interval  47",
+                          "set flood.advert.interval     47", "set flood.advert.interval 47  ",
+                          "set flood.advert.interval 47\r"}) {
+    auto r = check(cmd, out);
+    EXPECT_TRUE(r.matched && r.allowed) << cmd;
+    EXPECT_STREQ(out, "set flood.advert.interval 47") << cmd;
+  }
+  auto r = check("set flood.advert.interval   168", out);
+  EXPECT_TRUE(r.allowed);
+  EXPECT_STREQ(out, "set flood.advert.interval 168");
+  r = check("set flood.advert.interval  0", out);
+  EXPECT_TRUE(r.allowed);
+  EXPECT_STREQ(out, "set flood.advert.interval 0");
+}
+
+TEST(ProtectedCommands, FloodAdvertIntervalLimits) {
+  char out[64];
+  for (const char* ok : {"0", "47", "48", "100", "168"}) {
+    char cmd[64]; snprintf(cmd, sizeof cmd, "set flood.advert.interval %s", ok);
+    EXPECT_TRUE(check(cmd, out).allowed) << cmd;
+  }
+  for (const char* bad : {"1", "3", "46", "169", "255", "256", "-1", "abc", ""}) {
+    char cmd[64]; snprintf(cmd, sizeof cmd, "set flood.advert.interval %s", bad);
+    auto r = check(cmd, out);
+    EXPECT_TRUE(r.matched) << cmd;
+    EXPECT_FALSE(r.allowed) << cmd;
+    EXPECT_EQ(out[0], 0) << "no canonical command may be produced for: " << cmd;
+  }
+}
+
+TEST(ProtectedCommands, OtherSettingLimits) {
+  char out[64];
+  EXPECT_FALSE(check("set path.hash.mode 0", out).allowed);
+  EXPECT_FALSE(check("set path.hash.mode 3", out).allowed);
+  EXPECT_FALSE(check("set path.hash.mode", out).allowed);
+  EXPECT_TRUE(check("set path.hash.mode  2", out).allowed);
+  EXPECT_STREQ(out, "set path.hash.mode 2");
+  EXPECT_TRUE(check("set path.hash.mode 1", out).allowed);
+
+  EXPECT_FALSE(check("set multi.acks 0", out).allowed);
+  EXPECT_FALSE(check("set multi.acks 2", out).allowed);
+  EXPECT_TRUE(check("set multi.acks   1", out).allowed);
+  EXPECT_STREQ(out, "set multi.acks 1");
+
+  EXPECT_FALSE(check("set advert.interval 60", out).allowed);
+  EXPECT_FALSE(check("set advert.interval 2", out).allowed);
+  EXPECT_TRUE(check("set advert.interval  0", out).allowed);
+  EXPECT_STREQ(out, "set advert.interval 0");
+}
+
+TEST(ProtectedCommands, LoopDetectAcceptsOnlyWholeWords) {
+  char out[64];
+  for (const char* word : {"minimal", "moderate", "strict"}) {
+    char cmd[64]; snprintf(cmd, sizeof cmd, "set loop.detect  %s", word);   // two spaces
+    EXPECT_TRUE(check(cmd, out).allowed) << cmd;
+    char expected[64]; snprintf(expected, sizeof expected, "set loop.detect %s", word);
+    EXPECT_STREQ(out, expected);
+  }
+  for (const char* bad : {"off", "minimal-junk", "minimalx", "min", "STRICT", "0", ""}) {
+    char cmd[64]; snprintf(cmd, sizeof cmd, "set loop.detect %s", bad);
+    auto r = check(cmd, out);
+    EXPECT_TRUE(r.matched) << cmd;
+    EXPECT_FALSE(r.allowed) << cmd;
+  }
+}
+
+TEST(ProtectedCommands, CanonicalCommandNeverOverflowsItsBuffer) {
+  char out[8];   // deliberately too small: output must be truncated and NUL-terminated
+  memset(out, 'x', sizeof out);
+  auto r = savemesh::checkProtectedSet("set flood.advert.interval 47", out, sizeof out);
+  EXPECT_TRUE(r.allowed);
+  EXPECT_EQ(out[sizeof out - 1], 0);
+}
+
+TEST(ProtectedCommands, ReportsWhichSettingMatched) {
+  char out[64];
+  EXPECT_EQ(check("set flood.advert.interval 0", out).key, savemesh::ProtectedKey::FLOOD_ADVERT_INTERVAL);
+  EXPECT_EQ(check("set advert.interval 0", out).key, savemesh::ProtectedKey::ADVERT_INTERVAL);
+  EXPECT_EQ(check("set loop.detect strict", out).key, savemesh::ProtectedKey::LOOP_DETECT);
+  EXPECT_EQ(check("set multi.acks 1", out).key, savemesh::ProtectedKey::MULTI_ACKS);
+  EXPECT_EQ(check("set path.hash.mode 1", out).key, savemesh::ProtectedKey::PATH_HASH_MODE);
+  EXPECT_EQ(check("set name x", out).key, savemesh::ProtectedKey::NONE);
+}
+
+TEST(PublicChannelFilter, BuiltInSelfTestPasses) {
+  // Same check the repeater runs for "filter selftest" (software HMAC here).
+  EXPECT_TRUE(publicChannelSelfTest());
+  EXPECT_STREQ(publicChannelHmacBackend(), "software");
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

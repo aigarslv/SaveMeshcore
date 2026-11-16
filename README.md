@@ -2,7 +2,7 @@
 
 This fork follows the latest official MeshCore repeater release and adds configurable packet filtering to repeater firmware. It does not follow the upstream development branches. New official `repeater-vX.Y.Z` releases are merged automatically while retaining these filters.
 
-SaveMeshcore is for **repeater firmware only**. The patch changes only `examples/simple_repeater`, and this fork builds and checks only repeater targets. For companion, room server, or sensor firmware, use official MeshCore.
+SaveMeshcore is for **repeater firmware only**. All firmware changes are additions inside `examples/simple_repeater`; no upstream firmware line is modified. The fork also adds its own tests, a ThinkNode M8 build fix in `platformio.local.ini`, documentation, and release workflows. It builds and checks only repeater targets. For companion, room server, or sensor firmware, use official MeshCore.
 
 The filter commands are available only in repeater firmware. Changes are saved immediately and remain active after reboot. Run a command without `on` or `off` to show its current state.
 
@@ -30,11 +30,19 @@ set flood.advert.interval 0    # disable flood adverts
 set flood.advert.interval 47   # minimum enabled interval
 ```
 
+Extra spaces are accepted: `set flood.advert.interval  47` stores 47.
+
+> [!WARNING]
+> Because zero-hop adverts are always off, `set flood.advert.interval 0` makes the repeater **hidden**: it sends no adverts at all and does not answer node-discovery requests. It still forwards traffic, and clients that already know it can still log in. The command reply says so: `OK - node is now hidden: sends no adverts, ignores discovery requests`.
+
 These restrictions apply only to repeater firmware. The corresponding `get` commands remain available.
+
+Full details for every SaveMeshcore command and limit are in [docs/savemeshcore_cli.md](./docs/savemeshcore_cli.md). The upstream [CLI reference](./docs/cli_commands.md) is left unchanged so official releases merge cleanly; where they disagree, the SaveMeshcore page applies.
 
 | Command | Default | Behavior |
 | --- | --- | --- |
 | `filter` | | Shows the state of all filters in one line, for example `> 1byte off, data on, public off`. |
+| `filter selftest` | | Checks the Public-channel MAC code on this device, for example `> public hmac cc310: pass`. |
 | `filter 1byte on` | Off | Stops forwarding 1-byte path-hash flood packets that have already traversed at least one hop. Zero-hop floods, direct packets, and floods using 2-byte or 3-byte path hashes are unaffected. |
 | `filter 1byte off` | | Disables the 1-byte flood filter. |
 | `filter 1byte` | | Shows whether the 1-byte flood filter is on or off. |
@@ -95,7 +103,17 @@ Group packets name their channel with a single hash byte, and many channels shar
 
 Instead, the repeater checks each packet's 2-byte MAC against the published Public channel key. A matching MAC authenticates the packet as Public with the precision available in MeshCore's 16-bit channel tag. Among non-Public channels that also use hash byte `0x11`, the false-match probability is 1 in 65,536 per candidate packet. The repeater never decrypts the message, so it cannot read Public traffic. The Public key is not a secret: it is published in the MeshCore source and FAQ.
 
-The check runs only for group packets whose hash byte is `0x11`. Every other packet costs a single byte comparison.
+The MAC check runs only for `GRP_TXT` and `GRP_DATA` packets whose hash byte is `0x11`. Every other packet is rejected by a payload-type, length and hash-byte comparison, without any cryptography. On nRF52 boards the check uses the same CC310 hardware HMAC that MeshCore uses for decryption; other boards use software HMAC.
+
+Run `filter selftest` to confirm the check works on your device. It verifies a fixed Public-channel test vector through the same code path the filter uses, and reports which implementation ran:
+
+```text
+filter selftest
+> public hmac cc310: pass        (nRF52 hardware)
+> public hmac software: pass     (ESP32, RP2040, STM32)
+```
+
+`FAIL` means the Public filter cannot identify Public packets on this board; leave `filter public off` and report it.
 
 > [!IMPORTANT]
 > The data filter is enabled by default only when no saved `filter data` setting exists. After `filter data off` is saved, firmware updates from this fork preserve the off state.

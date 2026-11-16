@@ -1,6 +1,8 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 namespace savemesh {
 
@@ -64,6 +66,120 @@ bool repair(Prefs& prefs) {
     changed = true;
   }
   return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Command validation
+//
+// Protected "set ..." commands are validated here and then forwarded to the
+// stock CLI as a *canonical* string rebuilt from the validated value. Stock
+// parsers are not uniform (some skip extra spaces, some read 0 instead), so
+// forwarding the user's raw text could store something other than what was
+// validated.
+// ---------------------------------------------------------------------------
+
+inline bool isBlankChar(char c) {
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+inline bool isBlankText(const char* text) {
+  while (*text) {
+    if (!isBlankChar(*text++)) return false;
+  }
+  return true;
+}
+
+// Matches "<name>" optionally followed by spaces and an argument. Sets *arg to
+// the first non-space character after the name.
+inline bool matchCommand(const char* command, const char* name, const char** arg) {
+  size_t len = strlen(name);
+  if (strncmp(command, name, len) != 0 || (command[len] != 0 && command[len] != ' ')) return false;
+  *arg = command + len;
+  while (**arg == ' ') (*arg)++;
+  return true;
+}
+
+// Strict unsigned decimal: digits only (optionally followed by whitespace).
+inline bool parseUnsigned(const char* arg, uint16_t* value) {
+  if (*arg < '0' || *arg > '9') return false;
+  uint32_t result = 0;
+  while (*arg >= '0' && *arg <= '9') {
+    result = result * 10 + (uint32_t)(*arg++ - '0');
+    if (result > UINT16_MAX) return false;
+  }
+  if (!isBlankText(arg)) return false;
+  *value = (uint16_t)result;
+  return true;
+}
+
+inline bool matchesWord(const char* arg, const char* word) {
+  size_t len = strlen(word);
+  return strncmp(arg, word, len) == 0 && isBlankText(arg + len);
+}
+
+enum class ProtectedKey : uint8_t {
+  NONE, PATH_HASH_MODE, MULTI_ACKS, LOOP_DETECT, ADVERT_INTERVAL, FLOOD_ADVERT_INTERVAL
+};
+
+struct ProtectedCheck {
+  bool matched = false;                 // command names a protected setting
+  bool allowed = false;                 // value passes policy (canonical is valid)
+  ProtectedKey key = ProtectedKey::NONE;
+  const char* error = "";               // reply text when matched && !allowed
+};
+
+// Validates a protected "set" command. When allowed, writes the canonical
+// command to `canonical`; forward that string, never the original.
+inline ProtectedCheck checkProtectedSet(const char* command, char* canonical, size_t capacity) {
+  ProtectedCheck r;
+  const char* arg;
+  uint16_t value;
+
+  if (matchCommand(command, "set path.hash.mode", &arg)) {
+    r.matched = true; r.key = ProtectedKey::PATH_HASH_MODE;
+    if (parseUnsigned(arg, &value) && isPathHashModeAllowed(value)) {
+      r.allowed = true;
+      snprintf(canonical, capacity, "set path.hash.mode %u", (unsigned)value);
+    } else {
+      r.error = "Error: path.hash.mode must be 1 or 2";
+    }
+  } else if (matchCommand(command, "set multi.acks", &arg)) {
+    r.matched = true; r.key = ProtectedKey::MULTI_ACKS;
+    if (parseUnsigned(arg, &value) && isMultiAcksAllowed(value)) {
+      r.allowed = true;
+      snprintf(canonical, capacity, "set multi.acks %u", (unsigned)value);
+    } else {
+      r.error = "Error: multi.acks must be 1";
+    }
+  } else if (matchCommand(command, "set loop.detect", &arg)) {
+    r.matched = true; r.key = ProtectedKey::LOOP_DETECT;
+    const char* word = matchesWord(arg, "minimal") ? "minimal"
+                     : matchesWord(arg, "moderate") ? "moderate"
+                     : matchesWord(arg, "strict") ? "strict" : nullptr;
+    if (word) {
+      r.allowed = true;
+      snprintf(canonical, capacity, "set loop.detect %s", word);
+    } else {
+      r.error = "Error: loop.detect must be minimal, moderate or strict";
+    }
+  } else if (matchCommand(command, "set advert.interval", &arg)) {
+    r.matched = true; r.key = ProtectedKey::ADVERT_INTERVAL;
+    if (parseUnsigned(arg, &value) && isAdvertIntervalAllowed(value)) {
+      r.allowed = true;
+      snprintf(canonical, capacity, "set advert.interval %u", (unsigned)value);
+    } else {
+      r.error = "Error: advert.interval must be 0";
+    }
+  } else if (matchCommand(command, "set flood.advert.interval", &arg)) {
+    r.matched = true; r.key = ProtectedKey::FLOOD_ADVERT_INTERVAL;
+    if (parseUnsigned(arg, &value) && isFloodAdvertIntervalAllowed(value)) {
+      r.allowed = true;
+      snprintf(canonical, capacity, "set flood.advert.interval %u", (unsigned)value);
+    } else {
+      r.error = "Error: flood.advert.interval must be 0 or 47-168 hours";
+    }
+  }
+  return r;
 }
 
 }

@@ -60,35 +60,6 @@
 
 #define LAZY_CONTACTS_WRITE_DELAY    5000
 
-namespace {
-
-bool matchCommand(const char* command, const char* name, const char** arg) {
-  size_t len = strlen(name);
-  if (strncmp(command, name, len) != 0 || (command[len] != 0 && command[len] != ' ')) return false;
-  *arg = command + len;
-  while (**arg == ' ') (*arg)++;
-  return true;
-}
-
-bool parseUnsigned(const char* arg, uint16_t* value) {
-  if (*arg < '0' || *arg > '9') return false;
-  uint32_t result = 0;
-  while (*arg >= '0' && *arg <= '9') {
-    result = result * 10 + (*arg++ - '0');
-    if (result > UINT16_MAX) return false;
-  }
-  if (!StrHelper::isBlank(arg)) return false;
-  *value = (uint16_t)result;
-  return true;
-}
-
-bool matchesValue(const char* arg, const char* value) {
-  size_t len = strlen(value);
-  return strncmp(arg, value, len) == 0 && StrHelper::isBlank(arg + len);
-}
-
-}
-
 void MyMesh::putNeighbour(const mesh::Identity &id, uint32_t timestamp, float snr) {
 #if MAX_NEIGHBOURS // check if neighbours enabled
   // find existing neighbour, else use least recently updated
@@ -942,16 +913,14 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
   _prefs.bw = LORA_BW;
   _prefs.cr = LORA_CR;
   _prefs.tx_power_dbm = LORA_TX_POWER;
-  _prefs.advert_interval = 0;        // local zero-hop adverts disabled by SaveMeshcore policy
-  _prefs.flood_advert_interval = 47; // minimum 47 hours
+  _prefs.advert_interval = 1;        // default to 2 minutes for NEW installs
+  _prefs.flood_advert_interval = 47; // 47 hours
   _prefs.flood_max = 64;
   _prefs.flood_max_unscoped = 64;
   _prefs.flood_max_advert = 8;
   _prefs.interference_threshold = 0; // disabled
   _prefs.cad_enabled = 0;            // hardware CAD before TX (off by default; 'set cad on')
   _prefs.loop_detect = LOOP_DETECT_MINIMAL;
-  _prefs.path_hash_mode = 1;  // minimum 2-byte path hashes
-  _prefs.multi_acks = 1;
 
   // bridge defaults
   _prefs.bridge_enabled = 1;    // enabled
@@ -1249,51 +1218,26 @@ bool MyMesh::repairRepeaterPrefs() {
 }
 
 bool MyMesh::handleProtectedPrefsCommand(uint32_t sender_timestamp, char* command, char* reply) {
-  const char* arg;
-  uint16_t value;
+  char canonical[48];
+  savemesh::ProtectedCheck check = savemesh::checkProtectedSet(command, canonical, sizeof(canonical));
+  if (!check.matched) return false;
 
-  if (matchCommand(command, "set path.hash.mode", &arg)) {
-    if (!parseUnsigned(arg, &value) || !savemesh::isPathHashModeAllowed(value)) {
-      strcpy(reply, "Error: path.hash.mode must be 1 or 2");
-    } else {
-      _cli.handleCommand(sender_timestamp, command, reply);
-    }
+  if (!check.allowed) {
+    strcpy(reply, check.error);
     return true;
   }
-  if (matchCommand(command, "set multi.acks", &arg)) {
-    if (!parseUnsigned(arg, &value) || !savemesh::isMultiAcksAllowed(value)) {
-      strcpy(reply, "Error: multi.acks must be 1");
-    } else {
-      _cli.handleCommand(sender_timestamp, command, reply);
-    }
-    return true;
+
+  // Forward the rebuilt command, not the user's text: stock parsers differ in
+  // how they treat extra spaces, and the stored value must equal the one validated.
+  _cli.handleCommand(sender_timestamp, canonical, reply);
+
+  // Zero-hop adverts are always off, so disabling flood adverts makes the node
+  // send no adverts at all and ignore discovery requests (see isHiddenNode()).
+  if (check.key == savemesh::ProtectedKey::FLOOD_ADVERT_INTERVAL && isHiddenNode()
+      && strcmp(reply, "OK") == 0) {
+    strcpy(reply, "OK - node is now hidden: sends no adverts, ignores discovery requests");
   }
-  if (matchCommand(command, "set loop.detect", &arg)) {
-    if (!matchesValue(arg, "minimal") && !matchesValue(arg, "moderate")
-        && !matchesValue(arg, "strict")) {
-      strcpy(reply, "Error: loop.detect must be minimal, moderate or strict");
-    } else {
-      _cli.handleCommand(sender_timestamp, command, reply);
-    }
-    return true;
-  }
-  if (matchCommand(command, "set advert.interval", &arg)) {
-    if (!parseUnsigned(arg, &value) || !savemesh::isAdvertIntervalAllowed(value)) {
-      strcpy(reply, "Error: advert.interval must be 0");
-    } else {
-      _cli.handleCommand(sender_timestamp, command, reply);
-    }
-    return true;
-  }
-  if (matchCommand(command, "set flood.advert.interval", &arg)) {
-    if (!parseUnsigned(arg, &value) || !savemesh::isFloodAdvertIntervalAllowed(value)) {
-      strcpy(reply, "Error: flood.advert.interval must be 0 or 47-168 hours");
-    } else {
-      _cli.handleCommand(sender_timestamp, command, reply);
-    }
-    return true;
-  }
-  return false;
+  return true;
 }
 
 void MyMesh::handleFilterCommand(const char* name, const char* arg, uint8_t& setting, char* reply) {
@@ -1412,6 +1356,9 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
             _filter_prefs.filter_1byte ? "on" : "off",
             _filter_prefs.filter_data ? "on" : "off",
             _filter_prefs.filter_public ? "on" : "off");
+  } else if (strcmp(command, "filter selftest") == 0) {
+    sprintf(reply, "> public hmac %s: %s", publicChannelHmacBackend(),
+            publicChannelSelfTest() ? "pass" : "FAIL");
   } else if (memcmp(command, "filter 1byte", 12) == 0 && (command[12] == 0 || command[12] == ' ')) {
     handleFilterCommand("1byte", &command[12], _filter_prefs.filter_1byte, reply);
   } else if (memcmp(command, "filter data", 11) == 0 && (command[11] == 0 || command[11] == ' ')) {
