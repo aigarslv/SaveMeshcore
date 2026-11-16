@@ -697,11 +697,11 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 - `set flood.advert.interval <hours>`
 
 **Parameters:**
-- `hours`: Interval in hours (`47-168`)
+- `hours`: `0` (disabled), or an interval in hours (`47-168`)
 
 **Default:** `47` (Repeater)
 
-**SaveMeshcore policy:** Values below `47`, including disabled (`0`), are changed to `47` at boot. CLI values outside `47-168` are rejected.
+**SaveMeshcore policy:** `0` is allowed and disables periodic flood adverts. Saved values from `1` through `46` are changed to `47` at boot. CLI values other than `0` or `47-168` are rejected.
 
 ---
 

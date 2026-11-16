@@ -206,11 +206,13 @@ MeshCore allows you to manually broadcast your name, position and public encrypt
 * Zero hop means your advert is broadcast to anyone that can hear it, and that's it.
 * Flooded means it's broadcast and then repeated by all the repeaters that hear it.
 
-MeshCore clients only advertise themselves when the user initiates it. A repeater sends a flood advert once every 12 hours by default. This interval can be configured using the following command:
+MeshCore clients only advertise themselves when the user initiates it. In SaveMeshcore repeater firmware, the flood advert interval defaults to 47 hours. It may be disabled with `0`, or configured from 47 through 168 hours:
 
-`set flood.advert.interval {hours}`
+`set flood.advert.interval 0` (disabled)
 
-The separate `set advert.interval {minutes}` command controls the local zero-hop advert timer.
+`set flood.advert.interval 47` (minimum enabled interval)
+
+The separate local zero-hop advert timer is always disabled in SaveMeshcore (`set advert.interval 0`).
 
 ### 2.5. Q: Is there a hop limit?
 

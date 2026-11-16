@@ -26,7 +26,7 @@ inline bool isAdvertIntervalAllowed(uint16_t value) {
 }
 
 inline bool isFloodAdvertIntervalAllowed(uint16_t value) {
-  return value >= MIN_FLOOD_ADVERT_INTERVAL && value <= MAX_FLOOD_ADVERT_INTERVAL;
+  return value == 0 || (value >= MIN_FLOOD_ADVERT_INTERVAL && value <= MAX_FLOOD_ADVERT_INTERVAL);
 }
 
 template<typename Prefs>
@@ -55,7 +55,8 @@ bool repair(Prefs& prefs) {
     prefs.advert_interval = REQUIRED_ADVERT_INTERVAL;
     changed = true;
   }
-  if (prefs.flood_advert_interval < MIN_FLOOD_ADVERT_INTERVAL) {
+  if (prefs.flood_advert_interval > 0
+      && prefs.flood_advert_interval < MIN_FLOOD_ADVERT_INTERVAL) {
     prefs.flood_advert_interval = MIN_FLOOD_ADVERT_INTERVAL;
     changed = true;
   } else if (prefs.flood_advert_interval > MAX_FLOOD_ADVERT_INTERVAL) {

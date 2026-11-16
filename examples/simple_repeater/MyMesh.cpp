@@ -1287,7 +1287,7 @@ bool MyMesh::handleProtectedPrefsCommand(uint32_t sender_timestamp, char* comman
   }
   if (matchCommand(command, "set flood.advert.interval", &arg)) {
     if (!parseUnsigned(arg, &value) || !savemesh::isFloodAdvertIntervalAllowed(value)) {
-      strcpy(reply, "Error: flood.advert.interval range is 47-168 hours");
+      strcpy(reply, "Error: flood.advert.interval must be 0 or 47-168 hours");
     } else {
       _cli.handleCommand(sender_timestamp, command, reply);
     }
