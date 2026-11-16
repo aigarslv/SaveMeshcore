@@ -1315,6 +1315,11 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
       Serial.printf("\n");
     }
     reply[0] = 0;
+  } else if (memcmp(command, "filter", 6) == 0 && StrHelper::isBlank(&command[6])) {
+    sprintf(reply, "> 1byte %s, data %s, public %s",
+            _filter_prefs.filter_1byte ? "on" : "off",
+            _filter_prefs.filter_data ? "on" : "off",
+            _filter_prefs.filter_public ? "on" : "off");
   } else if (memcmp(command, "filter 1byte", 12) == 0 && (command[12] == 0 || command[12] == ' ')) {
     handleFilterCommand("1byte", &command[12], _filter_prefs.filter_1byte, reply);
   } else if (memcmp(command, "filter data", 11) == 0 && (command[11] == 0 || command[11] == ' ')) {

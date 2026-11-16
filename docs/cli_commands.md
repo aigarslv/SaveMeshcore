@@ -495,6 +495,16 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 
 ---
 
+#### View all repeater filters
+**Usage:**
+- `filter`
+
+**Example reply:** `> 1byte off, data on, public off`
+
+**Note:** Shows the state of every SaveMeshcore filter in one reply, so all of them can be checked with a single remote request.
+
+---
+
 #### Filter flood packets with 1-byte path hashes
 **Usage:**
 - `filter 1byte`
