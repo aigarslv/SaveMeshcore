@@ -1,20 +1,18 @@
 name: SaveMeshcore Repeater Release
 
-# Builds every repeater firmware target and publishes a GitHub release for a
-# tag named repeater-vX.Y.Z-savemesh, where vX.Y.Z is the official MeshCore
-# repeater release the build is based on.
-#
-# Runs when such a tag is pushed, when started manually, or when called by the
-# "Sync upstream repeater release" workflow after it merges a new release.
+# Builds every repeater target and publishes only after every target succeeds.
+# Accepted tags:
+#   repeater-vX.Y.Z-savemesh
+#   repeater-vX.Y.Z-savemesh.N  (SaveMeshcore patch revision)
 
 on:
   push:
     tags:
-      - 'repeater-v*-savemesh'
+      - 'repeater-v*-savemesh*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag, for example repeater-v1.18.0-savemesh'
+        description: 'Existing tag, for example repeater-v1.18.0-savemesh.1'
         required: true
         type: string
   workflow_call:
@@ -23,8 +21,9 @@ on:
         required: true
         type: string
 
+# Build jobs must not be able to change the repository.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: savemesh-release-${{ inputs.tag || github.ref_name }}
@@ -51,17 +50,33 @@ jobs:
           if [[ -z "$tag" && "$REF_TYPE" == "tag" ]]; then
             tag="$REF_NAME"
           fi
-          if [[ ! "$tag" =~ ^repeater-v[0-9]+\.[0-9]+\.[0-9]+-savemesh$ ]]; then
-            echo "Tag '$tag' is not of the form repeater-vX.Y.Z-savemesh" >&2
+          if [[ ! "$tag" =~ ^repeater-v[0-9]+\.[0-9]+\.[0-9]+-savemesh(\.[1-9][0-9]*)?$ ]]; then
+            echo "Tag '$tag' must be repeater-vX.Y.Z-savemesh or repeater-vX.Y.Z-savemesh.N" >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#repeater-}" >> "$GITHUB_OUTPUT"
 
-      - name: Check out tagged source
+      - name: Refuse to overwrite a published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if release=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" 2>/dev/null); then
+            if [[ "$(jq -r .draft <<< "$release")" != 'true' ]]; then
+              echo "$RELEASE_TAG is already published; published releases are immutable." >&2
+              exit 1
+            fi
+            echo "Found draft $RELEASE_TAG; this run will resume it."
+          fi
+
+      - name: Check out tagged source without write credentials
         uses: actions/checkout@v6
         with:
           ref: ${{ steps.tag.outputs.tag }}
+          persist-credentials: false
 
       - name: Set up build environment
         uses: ./.github/actions/setup-build-environment
@@ -72,22 +87,27 @@ jobs:
         run: |
           set -euo pipefail
           targets=$(bash build.sh get-repeater-firmwares-to-build | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          echo "Repeater targets: $(echo "$targets" | jq length)"
+          count=$(echo "$targets" | jq length)
+          if [[ "$count" -eq 0 ]]; then
+            echo 'No repeater targets found.' >&2
+            exit 1
+          fi
+          echo "Repeater targets: $count"
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
     runs-on: ubuntu-latest
-    continue-on-error: true   # one board failing must not block the others
     strategy:
       fail-fast: false
       matrix:
         target: ${{ fromJson(needs.prepare.outputs.targets) }}
     steps:
-      - name: Check out tagged source
+      - name: Check out tagged source without write credentials
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
 
       - name: Set up build environment
         uses: ./.github/actions/setup-build-environment
@@ -102,25 +122,67 @@ jobs:
         with:
           name: ${{ matrix.target }}
           path: out
+          if-no-files-found: error
 
   release:
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Download firmware
+      - name: Download all firmware
         uses: actions/download-artifact@v8
         with:
           merge-multiple: true
           path: out
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v3
+      - name: Verify every target and create manifest
+        shell: bash
+        env:
+          TARGETS_JSON: ${{ needs.prepare.outputs.targets }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          targets = json.loads(os.environ['TARGETS_JSON'])
+          files = sorted(p for p in Path('out').iterdir() if p.is_file())
+          missing = [t for t in targets if not any(p.name.startswith(t + '-') for p in files)]
+          if missing:
+              raise SystemExit('Missing firmware for: ' + ', '.join(missing))
+
+          with open('out/SHA256SUMS.txt', 'w') as manifest:
+              for path in files:
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  manifest.write(f'{digest}  {path.name}\n')
+          print(f'Verified {len(targets)} targets and {len(files)} firmware files.')
+          PY
+
+      # Use a draft as the upload transaction. If uploading fails, the draft
+      # remains unpublished and the daily sync retries it on the next run.
+      - name: Upload complete release as draft
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: SaveMeshcore Repeater Firmware ${{ needs.prepare.outputs.version }}
-          draft: false
-          make_latest: true
+          draft: true
+          make_latest: false
           body: |
             Official MeshCore repeater firmware ${{ needs.prepare.outputs.version }} with the SaveMeshcore filters (`filter 1byte`, `filter data`, `filter public`).
-            See the README for commands and defaults. Repeater firmware only.
+            See the README for commands, enforced settings, and defaults. Repeater firmware only.
           files: out/*
+
+      - name: Publish verified release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .id)
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+            -F draft=false -F prerelease=false -f make_latest=true > /dev/null
+          echo "Published ${RELEASE_TAG}."

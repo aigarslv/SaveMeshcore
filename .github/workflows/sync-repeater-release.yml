@@ -5,25 +5,30 @@ on:
     - cron: '17 5 * * *'
   workflow_dispatch:
 
+# Validation executes newly merged upstream code, so it is read-only. Only the
+# small publish job can push after reproducing the validated tree exactly.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: sync-upstream-repeater-release
   cancel-in-progress: false
 
 jobs:
-  sync:
+  validate:
     runs-on: ubuntu-latest
     outputs:
-      published: ${{ steps.publish.outputs.published }}
-      release_tag: ${{ steps.publish.outputs.release_tag }}
+      base_sha: ${{ steps.release.outputs.base_sha }}
+      release_tag: ${{ steps.release.outputs.tag }}
+      update: ${{ steps.release.outputs.update }}
+      tree: ${{ steps.candidate.outputs.tree }}
     steps:
-      - name: Check out patched release branch
+      - name: Check out patched release branch without write credentials
         uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Find latest official repeater release
         id: release
@@ -45,15 +50,15 @@ jobs:
           fi
 
           echo "Latest official repeater release: $latest_tag"
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
-
           if git merge-base --is-ancestor "$latest_tag" HEAD; then
             echo 'update=false' >> "$GITHUB_OUTPUT"
           else
             echo 'update=true' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check for an upstream filter implementation
+      - name: Stop if upstream now implements these filters
         if: steps.release.outputs.update == 'true'
         shell: bash
         env:
@@ -63,12 +68,26 @@ jobs:
           pattern='filter_1byte|filter_data|filter_public|filter 1byte|filter data|filter public'
           if git grep -Ei "$pattern" "$RELEASE_TAG" -- src examples; then
             echo 'The upstream release appears to provide packet filters.' >&2
-            echo 'Automatic synchronization stopped to avoid combining two filter implementations.' >&2
-            echo 'Review the upstream filters and migrate users to clean upstream firmware.' >&2
+            echo 'Automatic synchronization stopped to avoid combining two implementations.' >&2
             exit 1
           fi
 
-      - name: Merge official repeater release
+      - name: Stop if upstream allocates a reserved filtered payload type
+        if: steps.release.outputs.update == 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          definitions=$(git show "${RELEASE_TAG}:src/Packet.h")
+          pattern='PAYLOAD_TYPE_[A-Za-z0-9_]+[[:space:]]+0x0[C-Ec-e]|0x0[C-Ec-e][[:space:]].*PAYLOAD_TYPE_'
+          if grep -En "$pattern" <<< "$definitions"; then
+            echo 'Upstream allocated payload type 0x0C, 0x0D, or 0x0E.' >&2
+            echo 'SaveMeshcore blocks these IDs; review the allocation before updating.' >&2
+            exit 1
+          fi
+
+      - name: Build candidate merge
         if: steps.release.outputs.update == 'true'
         shell: bash
         env:
@@ -87,40 +106,97 @@ jobs:
         if: steps.release.outputs.update == 'true'
         run: pio run -e Heltec_v3_repeater
 
-      - name: Publish patched release
-        if: steps.release.outputs.update == 'true'
-        run: git push origin HEAD:main
+      - name: Record validated candidate tree
+        id: candidate
+        shell: bash
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
 
-      # Runs on every sync, not only after a merge: if an earlier run updated
-      # main but failed to push the tag, this run creates the missing tag.
-      - name: Tag release if missing
-        id: publish
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_needed: ${{ steps.release.outputs.needed }}
+      release_tag: ${{ steps.release.outputs.tag }}
+    steps:
+      # This job runs no project build code. Its credential can only reproduce
+      # and publish the exact tree validated in the read-only job.
+      - name: Check out current main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Reproduce and publish validated tree
         shell: bash
         env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          BASE_SHA: ${{ needs.validate.outputs.base_sha }}
+          EXPECTED_TREE: ${{ needs.validate.outputs.tree }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          UPDATE: ${{ needs.validate.outputs.update }}
         run: |
           set -euo pipefail
-          release_tag="${RELEASE_TAG}-savemesh"
-          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --tags origin "refs/tags/$release_tag" > /dev/null; then
-            echo "$release_tag already exists."
-            echo "published=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [[ "$(git rev-parse HEAD)" != "$BASE_SHA" ]]; then
+            echo 'main changed during validation; the next sync will retry.' >&2
+            exit 1
           fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a "$release_tag" -m "Official $RELEASE_TAG with SaveMeshcore filters"
-          git push origin "refs/tags/$release_tag"
-          echo "Created $release_tag."
-          echo "published=true" >> "$GITHUB_OUTPUT"
 
-  # Tags pushed with GITHUB_TOKEN do not start other workflows, so the release
-  # build is called directly here.
+          if [[ "$UPDATE" == 'true' ]]; then
+            git remote add upstream https://github.com/meshcore-dev/MeshCore.git
+            git fetch --force upstream "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git merge --no-edit "$RELEASE_TAG"
+          fi
+
+          actual_tree=$(git rev-parse 'HEAD^{tree}')
+          if [[ "$actual_tree" != "$EXPECTED_TREE" ]]; then
+            echo "Candidate tree mismatch: expected $EXPECTED_TREE, got $actual_tree" >&2
+            exit 1
+          fi
+
+          if [[ "$UPDATE" == 'true' ]]; then
+            git push origin HEAD:main
+          fi
+
+      - name: Ensure release tag exists and decide whether to build
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          release_tag="${UPSTREAM_TAG}-savemesh"
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$release_tag" > /dev/null; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a "$release_tag" -m "Official $UPSTREAM_TAG with SaveMeshcore filters"
+            git push origin "refs/tags/$release_tag"
+            echo "Created $release_tag."
+          fi
+
+          if release=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" 2>/dev/null); then
+            if [[ "$(jq -r .draft <<< "$release")" == 'true' ]]; then
+              echo 'Existing release is still a draft; retrying its build.'
+              echo 'needed=true' >> "$GITHUB_OUTPUT"
+            else
+              echo "$release_tag is already published."
+              echo 'needed=false' >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo 'No published release exists; starting its build.'
+            echo 'needed=true' >> "$GITHUB_OUTPUT"
+          fi
+
   release:
-    needs: sync
-    if: needs.sync.outputs.published == 'true'
+    needs: publish
+    if: needs.publish.outputs.release_needed == 'true'
     uses: ./.github/workflows/savemesh-release.yml
     with:
-      tag: ${{ needs.sync.outputs.release_tag }}
+      tag: ${{ needs.publish.outputs.release_tag }}
     permissions:
       contents: write
