@@ -28,6 +28,7 @@ jobs:
           - LilyGo_Tlora_C6_repeater_   # ESP32-C6
           - wio_wm1110_repeater         # LR1110 (nRF52)
           - Tbeam_SX1276_repeater       # SX1276 (ESP32)
+          - ThinkNode_M8_repeater       # nRF52, fixed in platformio.local.ini
 
     steps:
       - name: Clone Repo
