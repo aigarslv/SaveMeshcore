@@ -88,19 +88,31 @@ jobs:
         run: pio run -e Heltec_v3_repeater
 
       - name: Publish patched release
-        id: publish
         if: steps.release.outputs.update == 'true'
+        run: git push origin HEAD:main
+
+      # Runs on every sync, not only after a merge: if an earlier run updated
+      # main but failed to push the tag, this run creates the missing tag.
+      - name: Tag release if missing
+        id: publish
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
           release_tag="${RELEASE_TAG}-savemesh"
-          git push origin HEAD:main
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$release_tag" > /dev/null; then
+            echo "$release_tag already exists."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "$release_tag" -m "Official $RELEASE_TAG with SaveMeshcore filters"
           git push origin "refs/tags/$release_tag"
+          echo "Created $release_tag."
           echo "published=true" >> "$GITHUB_OUTPUT"
-          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
   # Tags pushed with GITHUB_TOKEN do not start other workflows, so the release
   # build is called directly here.

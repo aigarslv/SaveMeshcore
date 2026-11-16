@@ -8,6 +8,7 @@ The filter commands are available only in repeater firmware. Changes are saved i
 
 | Command | Default | Behavior |
 | --- | --- | --- |
+| `filter` | | Shows the state of all filters in one line, for example `> 1byte off, data on, public off`. |
 | `filter 1byte on` | Off | Stops forwarding 1-byte path-hash flood packets that have already traversed at least one hop. Zero-hop floods, direct packets, and floods using 2-byte or 3-byte path hashes are unaffected. |
 | `filter 1byte off` | | Disables the 1-byte flood filter. |
 | `filter 1byte` | | Shows whether the 1-byte flood filter is on or off. |
@@ -36,7 +37,14 @@ filter data off
 filter public off
 ```
 
-Check the current filter states without changing them:
+Check all filters in one request, which is handy over LoRa:
+
+```text
+filter
+> 1byte off, data on, public off
+```
+
+Check one filter at a time:
 
 ```text
 filter 1byte
