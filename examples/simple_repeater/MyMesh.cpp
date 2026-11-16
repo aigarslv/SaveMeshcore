@@ -461,7 +461,17 @@ bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
   }
   if (_filter_prefs.filter_data) {
     uint8_t type = packet->getPayloadType();
-    if (type == PAYLOAD_TYPE_GRP_DATA || type == 0x0C || type == 0x0D || type == 0x0E || type == PAYLOAD_TYPE_RAW_CUSTOM) {
+    // Zero-hop flood telemetry may cross one SaveMeshcore repeater. This
+    // repeater appends its path hash before retransmitting, so another
+    // SaveMeshcore repeater with this filter enabled sees a non-zero hop count
+    // and refuses to forward it again. A zero-hop direct packet is local
+    // delivery and MeshCore does not pass it to this forwarding hook, but keep
+    // the exception route-independent for explicit and future-safe semantics.
+    bool is_zero_hop_group_data = type == PAYLOAD_TYPE_GRP_DATA
+                                  && packet->getPathHashCount() == 0;
+    if (!is_zero_hop_group_data
+        && (type == PAYLOAD_TYPE_GRP_DATA || type == 0x0C || type == 0x0D
+            || type == 0x0E || type == PAYLOAD_TYPE_RAW_CUSTOM)) {
       MESH_DEBUG_PRINTLN("allowPacketForward: data payload type filtered");
       return false;
     }

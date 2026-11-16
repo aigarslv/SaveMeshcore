@@ -12,7 +12,7 @@ The filter commands are available only in repeater firmware. Changes are saved i
 | `filter 1byte on` | Off | Stops forwarding 1-byte path-hash flood packets that have already traversed at least one hop. Zero-hop floods, direct packets, and floods using 2-byte or 3-byte path hashes are unaffected. |
 | `filter 1byte off` | | Disables the 1-byte flood filter. |
 | `filter 1byte` | | Shows whether the 1-byte flood filter is on or off. |
-| `filter data on` | On | Stops forwarding payload types `0x06` (`GRP_DATA`), `0x0C`–`0x0E` (reserved unsigned types), and `0x0F` (`RAW_CUSTOM`). |
+| `filter data on` | On | Allows zero-hop `GRP_DATA`. A zero-hop flood may cross one SaveMeshcore repeater; a direct packet with no path is local delivery and is not retransmitted. Already-relayed flood or direct `GRP_DATA`, plus payload types `0x0C`–`0x0F`, are not forwarded. |
 | `filter data off` | | Disables the data payload filter. |
 | `filter data` | | Shows whether the data payload filter is on or off. |
 | `filter public on` | Off | Stops forwarding group messages (`GRP_TXT` and `GRP_DATA`) on the default **Public** channel. |
@@ -70,6 +70,15 @@ Group packets name their channel with a single hash byte, and many channels shar
 Instead, the repeater checks each packet's 2-byte MAC against the published Public channel key. A packet is dropped only when the MAC verifies, which proves it belongs to Public. Other channels sharing `0x11` are still forwarded. The repeater never decrypts the message, so it cannot read Public traffic. The Public key is not a secret: it is published in the MeshCore source and FAQ.
 
 The check runs only for group packets whose hash byte is `0x11`. Every other packet costs a single byte comparison.
+
+### Local GRP_DATA telemetry
+
+With `filter data on`, zero-hop `GRP_DATA` remains allowed:
+
+- A zero-hop flood may cross one SaveMeshcore repeater. This lets two nodes within that repeater's coverage exchange telemetry. When another SaveMeshcore repeater receives the relayed copy, its path already contains one hop, so the data filter drops it.
+- A direct packet with path count 0 is local delivery. MeshCore does not ask the repeater to forward it, so the filter does not block it; the repeater also does not retransmit it. This only helps when the receiving node hears the sender directly.
+
+The first flood retransmission is still an ordinary MeshCore flood because the protocol has no "local only" flag. A stock repeater, or one with `filter data off`, can forward that copy farther. The exception also does not override `filter public on` or MeshCore's normal region, hop-limit and loop checks. Direct GRP_DATA with one or more routing hops remains blocked while the data filter is on.
 
 > [!IMPORTANT]
 > The data filter is enabled by default only when no saved `filter data` setting exists. After `filter data off` is saved, firmware updates from this fork preserve the off state.

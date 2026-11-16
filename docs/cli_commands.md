@@ -525,7 +525,13 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 
 **Default:** `on`
 
-**Note:** When `on`, the repeater does not forward packets with payload type 0x06 (GRP_DATA), 0x0C to 0x0E (unsigned), or 0x0F (RAW_CUSTOM).
+**Note:** When `on`:
+
+- Zero-hop `GRP_DATA` remains allowed. A zero-hop flood is forwarded once, allowing telemetry between nodes covered by the same SaveMeshcore repeater. A direct packet with path count 0 is local delivery and is not retransmitted by the repeater.
+- A flood or direct `GRP_DATA` packet that already contains a path hop is not forwarded again.
+- Payload types 0x0C to 0x0E (unsigned) and 0x0F (RAW_CUSTOM) are not forwarded.
+
+The first relay remains an ordinary MeshCore flood packet because the protocol has no "local only" marker. Another SaveMeshcore repeater with this filter enabled stops it at one hop; stock repeaters and repeaters with `filter data off` can relay it farther. Normal region, hop-limit, loop and Public-channel filters still apply.
 
 ---
 

@@ -15,7 +15,8 @@
 class FilterPrefs : public ConfigSerializer {
 public:
   uint8_t filter_1byte = 0;   // drop multi-hop flood packets with 1-byte path hashes
-  uint8_t filter_data = 1;    // drop payload types 0x06, 0x0C-0x0E, 0x0F
+  uint8_t filter_data = 1;    // allow zero-hop GRP_DATA;
+                              // drop relayed flood/direct GRP_DATA and 0x0C-0x0F
   uint8_t filter_public = 0;  // drop group messages on the default Public channel
 
   // Loads FILTER_PREFS_FILE. If it does not exist yet, imports the values an
