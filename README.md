@@ -101,7 +101,9 @@ The check runs only for group packets whose hash byte is `0x11`. Every other pac
 
 ### Firmware releases
 
-Ready-to-flash firmware for every repeater board is published on the [Releases page](https://github.com/aigarslv/SaveMeshcore/releases). Each release is tagged `repeater-vX.Y.Z-savemesh`, where `vX.Y.Z` is the official MeshCore repeater version it is built from. For example, `repeater-v1.18.0-savemesh` is official repeater v1.18.0 with the SaveMeshcore filters.
+Ready-to-flash firmware for every repeater board is published on the [Releases page](https://github.com/aigarslv/SaveMeshcore/releases). Automatic upstream releases use `repeater-vX.Y.Z-savemesh`, where `vX.Y.Z` is the official MeshCore repeater version. SaveMeshcore-only fixes use immutable revision tags such as `repeater-v1.18.0-savemesh.1`, `.2`, and so on; published tags are never moved.
+
+A release is published only after every repeater target builds and its artifacts are verified. A failed or interrupted release remains missing or in draft state, and the daily sync retries it even when its tag already exists.
 
 When MeshCore publishes a new official repeater release, the fork merges it, creates the matching tag, and builds all repeater boards automatically.
 
@@ -113,7 +115,7 @@ The filter settings are stored in their own file, `/savemesh_prefs`, separate fr
 
 Older SaveMeshcore builds stored these settings in `/prefs.json`. On first boot, this build copies them into `/savemesh_prefs` automatically.
 
-The automatic release updater checks each new release for upstream implementations using the same filter settings or commands. If it finds one, synchronization stops instead of combining the upstream and SaveMeshcore filters. You can then review the official implementation and move to clean upstream firmware without erasing the device.
+The automatic release updater checks each new release for upstream implementations using the same filter settings or commands. It also stops if upstream assigns one of the reserved payload IDs `0x0C`-`0x0E`, because SaveMeshcore currently blocks those IDs. Either condition requires manual review before updating, preventing the fork from silently combining incompatible behavior. You can then review the official implementation and move to clean upstream firmware without erasing the device.
 
 ## About MeshCore
 
