@@ -5,6 +5,12 @@
 
 namespace {
 
+static_assert(PUB_KEY_SIZE == 32, "Review Public matching for a new key size");
+static_assert(CIPHER_MAC_SIZE == 2, "Review Public matching for a new MAC size");
+static_assert(CIPHER_BLOCK_SIZE == 16, "Review Public matching for a new cipher block size");
+static_assert(PAYLOAD_TYPE_GRP_TXT == 0x05, "Review Public matching for the new GRP_TXT value");
+static_assert(PAYLOAD_TYPE_GRP_DATA == 0x06, "Review Public matching for the new GRP_DATA value");
+
 // The default "Public" channel key (base64 izOH6cXN6mrJ5e26oRXNcg==), published
 // in the MeshCore source and FAQ. Zero-padded to 32 bytes, as MeshCore keys
 // the channel HMAC with a PUB_KEY_SIZE buffer.

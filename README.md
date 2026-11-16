@@ -92,7 +92,7 @@ OK - filter public on
 
 Group packets name their channel with a single hash byte, and many channels share each value. The Public channel's byte is `0x11`. Blocking that byte alone would also drop other channels that happen to use `0x11`.
 
-Instead, the repeater checks each packet's 2-byte MAC against the published Public channel key. A packet is dropped only when the MAC verifies, which proves it belongs to Public. Other channels sharing `0x11` are still forwarded. The repeater never decrypts the message, so it cannot read Public traffic. The Public key is not a secret: it is published in the MeshCore source and FAQ.
+Instead, the repeater checks each packet's 2-byte MAC against the published Public channel key. A matching MAC authenticates the packet as Public with the precision available in MeshCore's 16-bit channel tag. Among non-Public channels that also use hash byte `0x11`, the false-match probability is 1 in 65,536 per candidate packet. The repeater never decrypts the message, so it cannot read Public traffic. The Public key is not a secret: it is published in the MeshCore source and FAQ.
 
 The check runs only for group packets whose hash byte is `0x11`. Every other packet costs a single byte comparison.
 

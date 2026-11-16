@@ -38,6 +38,8 @@
 #include "RateLimiter.h"
 #include "FilterPrefs.h"
 #include "ChannelMatch.h"
+#include "ForwardFilter.h"
+#include "RepeaterPrefsPolicy.h"
 
 #ifdef WITH_BRIDGE
 extern AbstractBridge* bridge;

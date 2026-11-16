@@ -484,16 +484,13 @@ bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
       return false;
     }
   }
-  if (_filter_prefs.filter_1byte && packet->isRouteFlood() && packet->getPathHashSize() == 1 && packet->getPathHashCount() > 0) {
+  if (savemesh::shouldDropOneByte(packet, _filter_prefs.filter_1byte)) {
     MESH_DEBUG_PRINTLN("allowPacketForward: 1-byte path hash flood packet filtered");
     return false;
   }
-  if (_filter_prefs.filter_data) {
-    uint8_t type = packet->getPayloadType();
-    if (type == PAYLOAD_TYPE_GRP_DATA || type == 0x0C || type == 0x0D || type == 0x0E || type == PAYLOAD_TYPE_RAW_CUSTOM) {
-      MESH_DEBUG_PRINTLN("allowPacketForward: data payload type filtered");
-      return false;
-    }
+  if (savemesh::shouldDropData(packet, _filter_prefs.filter_data)) {
+    MESH_DEBUG_PRINTLN("allowPacketForward: data payload type filtered");
+    return false;
   }
   if (_filter_prefs.filter_public && isPublicChannelPacket(packet)) {
     MESH_DEBUG_PRINTLN("allowPacketForward: Public channel packet filtered");
@@ -1244,38 +1241,7 @@ void MyMesh::clearStats() {
 }
 
 bool MyMesh::repairRepeaterPrefs() {
-  bool changed = false;
-
-  if (_prefs.path_hash_mode < 1) {
-    _prefs.path_hash_mode = 1;  // minimum: 2-byte path hashes
-    changed = true;
-  } else if (_prefs.path_hash_mode > 2) {
-    _prefs.path_hash_mode = 2;  // maximum: 3-byte path hashes
-    changed = true;
-  }
-  if (_prefs.multi_acks != 1) {
-    _prefs.multi_acks = 1;
-    changed = true;
-  }
-  if (_prefs.loop_detect < LOOP_DETECT_MINIMAL) {
-    _prefs.loop_detect = LOOP_DETECT_MINIMAL;
-    changed = true;
-  } else if (_prefs.loop_detect > LOOP_DETECT_STRICT) {
-    _prefs.loop_detect = LOOP_DETECT_STRICT;
-    changed = true;
-  }
-  if (_prefs.advert_interval != 0) {
-    _prefs.advert_interval = 0;
-    changed = true;
-  }
-  if (_prefs.flood_advert_interval < 47) {
-    _prefs.flood_advert_interval = 47;
-    changed = true;
-  } else if (_prefs.flood_advert_interval > 168) {
-    _prefs.flood_advert_interval = 168;
-    changed = true;
-  }
-
+  bool changed = savemesh::repair(_prefs);
   if (changed && !_cli.savePrefs(_fs)) {
     MESH_DEBUG_PRINTLN("Unable to save repaired repeater preferences");
   }
@@ -1287,7 +1253,7 @@ bool MyMesh::handleProtectedPrefsCommand(uint32_t sender_timestamp, char* comman
   uint16_t value;
 
   if (matchCommand(command, "set path.hash.mode", &arg)) {
-    if (!parseUnsigned(arg, &value) || value < 1 || value > 2) {
+    if (!parseUnsigned(arg, &value) || !savemesh::isPathHashModeAllowed(value)) {
       strcpy(reply, "Error: path.hash.mode must be 1 or 2");
     } else {
       _cli.handleCommand(sender_timestamp, command, reply);
@@ -1295,7 +1261,7 @@ bool MyMesh::handleProtectedPrefsCommand(uint32_t sender_timestamp, char* comman
     return true;
   }
   if (matchCommand(command, "set multi.acks", &arg)) {
-    if (!parseUnsigned(arg, &value) || value != 1) {
+    if (!parseUnsigned(arg, &value) || !savemesh::isMultiAcksAllowed(value)) {
       strcpy(reply, "Error: multi.acks must be 1");
     } else {
       _cli.handleCommand(sender_timestamp, command, reply);
@@ -1312,7 +1278,7 @@ bool MyMesh::handleProtectedPrefsCommand(uint32_t sender_timestamp, char* comman
     return true;
   }
   if (matchCommand(command, "set advert.interval", &arg)) {
-    if (!parseUnsigned(arg, &value) || value != 0) {
+    if (!parseUnsigned(arg, &value) || !savemesh::isAdvertIntervalAllowed(value)) {
       strcpy(reply, "Error: advert.interval must be 0");
     } else {
       _cli.handleCommand(sender_timestamp, command, reply);
@@ -1320,7 +1286,7 @@ bool MyMesh::handleProtectedPrefsCommand(uint32_t sender_timestamp, char* comman
     return true;
   }
   if (matchCommand(command, "set flood.advert.interval", &arg)) {
-    if (!parseUnsigned(arg, &value) || value < 47 || value > 168) {
+    if (!parseUnsigned(arg, &value) || !savemesh::isFloodAdvertIntervalAllowed(value)) {
       strcpy(reply, "Error: flood.advert.interval range is 47-168 hours");
     } else {
       _cli.handleCommand(sender_timestamp, command, reply);
@@ -1344,6 +1310,11 @@ void MyMesh::handleFilterCommand(const char* name, const char* arg, uint8_t& set
     value = 0;
   } else {
     strcpy(reply, "Error, must be: on or off");
+    return;
+  }
+
+  if (setting == value) {
+    sprintf(reply, "OK - filter %s %s", name, value ? "on" : "off");
     return;
   }
 

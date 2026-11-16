@@ -535,7 +535,7 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 
 **Default:** `off`
 
-**Note:** When `on`, the repeater does not forward group messages (GRP_TXT and GRP_DATA) on the default Public channel. The repeater identifies the channel by checking the packet's MAC with the published Public channel key. It does not decrypt the messages, and other channels that share the Public channel's hash byte (`0x11`) are still forwarded.
+**Note:** When `on`, the repeater does not forward group messages (GRP_TXT and GRP_DATA) on the default Public channel. The repeater checks the packet's MAC with the published Public channel key without decrypting the message. MeshCore uses a 16-bit channel MAC, so a non-Public channel that also uses hash byte `0x11` has a 1-in-65,536 false-match probability per candidate packet.
 
 ---
 
