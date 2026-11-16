@@ -2,7 +2,9 @@
 
 This fork follows the latest official MeshCore repeater release and adds configurable packet filtering to repeater firmware. It does not follow the upstream development branches. New official `repeater-vX.Y.Z` releases are merged automatically while retaining these filters.
 
-The filter commands are available only in repeater firmware. Changes are saved in the repeater preferences and remain active after reboot. Run a command without `on` or `off` to show its current state.
+SaveMeshcore is for **repeater firmware only**. The patch changes only `examples/simple_repeater`, and this fork builds and checks only repeater targets. For companion, room server, or sensor firmware, use official MeshCore.
+
+The filter commands are available only in repeater firmware. Changes are saved immediately and remain active after reboot. Run a command without `on` or `off` to show its current state.
 
 | Command | Default | Behavior |
 | --- | --- | --- |
@@ -50,7 +52,9 @@ OK - filter data off
 
 ### Firmware upgrade compatibility
 
-You can install clean official MeshCore firmware later without erasing the filesystem. Official firmware safely ignores this fork's `f_data` and `f_1byte` preference keys. If official firmware subsequently rewrites the preferences file, it may remove those unknown keys; reinstalling this fork after that would make the data filter default to on again.
+The filter settings are stored in their own file, `/savemesh_prefs`, separate from the official `/prefs.json`. Official MeshCore firmware never reads or rewrites that file. You can install clean official firmware without erasing the device: all radio, identity, and region settings carry over, and the filters simply stop being applied. If you later reinstall SaveMeshcore, your saved filter choices, including `filter data off`, come back unchanged.
+
+Older SaveMeshcore builds stored these settings in `/prefs.json`. On first boot, this build copies them into `/savemesh_prefs` automatically.
 
 The automatic release updater checks each new release for upstream implementations using the same filter settings or commands. If it finds one, synchronization stops instead of combining the upstream and SaveMeshcore filters. You can then review the official implementation and move to clean upstream firmware without erasing the device.
 

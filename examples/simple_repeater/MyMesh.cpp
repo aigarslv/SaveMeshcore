@@ -455,11 +455,11 @@ bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
       return false;
     }
   }
-  if (_prefs.filter_1byte && packet->isRouteFlood() && packet->getPathHashSize() == 1 && packet->getPathHashCount() > 0) {
+  if (_filter_prefs.filter_1byte && packet->isRouteFlood() && packet->getPathHashSize() == 1 && packet->getPathHashCount() > 0) {
     MESH_DEBUG_PRINTLN("allowPacketForward: 1-byte path hash flood packet filtered");
     return false;
   }
-  if (_prefs.filter_data) {
+  if (_filter_prefs.filter_data) {
     uint8_t type = packet->getPayloadType();
     if (type == PAYLOAD_TYPE_GRP_DATA || type == 0x0C || type == 0x0D || type == 0x0E || type == PAYLOAD_TYPE_RAW_CUSTOM) {
       MESH_DEBUG_PRINTLN("allowPacketForward: data payload type filtered");
@@ -958,6 +958,7 @@ void MyMesh::begin(FILESYSTEM *fs) {
   _fs = fs;
   // load persisted prefs
   _cli.loadPrefs(_fs);
+  _filter_prefs.begin(_fs);
   acl.load(_fs, self_id);
   // TODO: key_store.begin();
   region_map.load(_fs);
@@ -1206,6 +1207,33 @@ void MyMesh::clearStats() {
   ((SimpleMeshTables *)getTables())->resetStats();
 }
 
+void MyMesh::handleFilterCommand(const char* name, const char* arg, uint8_t& setting, char* reply) {
+  while (*arg == ' ') arg++;
+  if (*arg == 0) {
+    sprintf(reply, "> filter %s %s", name, setting ? "on" : "off");
+    return;
+  }
+
+  uint8_t value;
+  if (strcmp(arg, "on") == 0) {
+    value = 1;
+  } else if (strcmp(arg, "off") == 0) {
+    value = 0;
+  } else {
+    strcpy(reply, "Error, must be: on or off");
+    return;
+  }
+
+  uint8_t previous = setting;
+  setting = value;
+  if (_filter_prefs.save(_fs)) {
+    sprintf(reply, "OK - filter %s %s", name, value ? "on" : "off");
+  } else {
+    setting = previous;  // keep RAM and flash in agreement
+    strcpy(reply, "Error - could not save filter settings");
+  }
+}
+
 void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply) {
   if (region_load_active) {
     if (StrHelper::isBlank(command)) {  // empty/blank line, signal to terminate 'load' operation
@@ -1284,37 +1312,9 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
     }
     reply[0] = 0;
   } else if (memcmp(command, "filter 1byte", 12) == 0 && (command[12] == 0 || command[12] == ' ')) {
-    const char* arg = &command[12];
-    while (*arg == ' ') arg++;
-    if (strcmp(arg, "on") == 0) {
-      _prefs.filter_1byte = 1;
-      savePrefs();
-      strcpy(reply, "OK - filter 1byte on");
-    } else if (strcmp(arg, "off") == 0) {
-      _prefs.filter_1byte = 0;
-      savePrefs();
-      strcpy(reply, "OK - filter 1byte off");
-    } else if (*arg == 0) {
-      sprintf(reply, "> filter 1byte %s", _prefs.filter_1byte ? "on" : "off");
-    } else {
-      strcpy(reply, "Error, must be: on or off");
-    }
+    handleFilterCommand("1byte", &command[12], _filter_prefs.filter_1byte, reply);
   } else if (memcmp(command, "filter data", 11) == 0 && (command[11] == 0 || command[11] == ' ')) {
-    const char* arg = &command[11];
-    while (*arg == ' ') arg++;
-    if (strcmp(arg, "on") == 0) {
-      _prefs.filter_data = 1;
-      savePrefs();
-      strcpy(reply, "OK - filter data on");
-    } else if (strcmp(arg, "off") == 0) {
-      _prefs.filter_data = 0;
-      savePrefs();
-      strcpy(reply, "OK - filter data off");
-    } else if (*arg == 0) {
-      sprintf(reply, "> filter data %s", _prefs.filter_data ? "on" : "off");
-    } else {
-      strcpy(reply, "Error, must be: on or off");
-    }
+    handleFilterCommand("data", &command[11], _filter_prefs.filter_data, reply);
   } else if (memcmp(command, "discover.neighbors", 18) == 0) {
     const char* sub = command + 18;
     while (*sub == ' ') sub++;

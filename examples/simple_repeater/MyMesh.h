@@ -36,6 +36,7 @@
 #include <helpers/RegionMap.h>
 #include <helpers/RoutingPolicy.h>
 #include "RateLimiter.h"
+#include "FilterPrefs.h"
 
 #ifdef WITH_BRIDGE
 extern AbstractBridge* bridge;
@@ -85,6 +86,7 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
   unsigned long next_local_advert, next_flood_advert;
   bool _logging;
   NodePrefs _prefs;
+  FilterPrefs _filter_prefs;
   ClientACL  acl;
   CommonCLI _cli;
   uint8_t reply_data[MAX_PACKET_PAYLOAD];
@@ -117,6 +119,7 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
 #endif
 
   void putNeighbour(const mesh::Identity& id, uint32_t timestamp, float snr);
+  void handleFilterCommand(const char* name, const char* arg, uint8_t& setting, char* reply);
   uint8_t handleLoginReq(const mesh::Identity& sender, const uint8_t* secret, uint32_t sender_timestamp, const uint8_t* data, bool is_flood);
   uint8_t handleAnonRegionsReq(const mesh::Identity& sender, uint32_t sender_timestamp, const uint8_t* data);
   uint8_t handleAnonOwnerReq(const mesh::Identity& sender, uint32_t sender_timestamp, const uint8_t* data);
