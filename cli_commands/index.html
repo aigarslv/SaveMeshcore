@@ -3849,9 +3849,9 @@
 - <code>get flood.advert.interval</code>
 - <code>set flood.advert.interval &lt;hours&gt;</code></p>
 <p><strong>Parameters:</strong>
-- <code>hours</code>: Interval in hours (<code>47-168</code>)</p>
+- <code>hours</code>: <code>0</code> (disabled), or an interval in hours (<code>47-168</code>)</p>
 <p><strong>Default:</strong> <code>47</code> (Repeater)</p>
-<p><strong>SaveMeshcore policy:</strong> Values below <code>47</code>, including disabled (<code>0</code>), are changed to <code>47</code> at boot. CLI values outside <code>47-168</code> are rejected.</p>
+<p><strong>SaveMeshcore policy:</strong> <code>0</code> is allowed and disables periodic flood adverts. Saved values from <code>1</code> through <code>46</code> are changed to <code>47</code> at boot. CLI values other than <code>0</code> or <code>47-168</code> are rejected.</p>
 <hr />
 <h4 id="view-or-change-the-zero-hop-advert-interval">View or change the zero-hop advert interval</h4>
 <p><strong>Usage:</strong>
