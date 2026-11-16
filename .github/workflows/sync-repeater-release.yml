@@ -1,0 +1,74 @@
+name: Sync upstream repeater release
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-repeater-release
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out patched release branch
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Find latest official repeater release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/meshcore-dev/MeshCore.git
+          git fetch --force upstream '+refs/tags/repeater-v*:refs/tags/repeater-v*'
+
+          latest_tag="$({
+            git tag --list 'repeater-v*' \
+              | sed -nE '/^repeater-v[0-9]+\.[0-9]+\.[0-9]+$/p' \
+              | sort -V
+          } | tail -n 1)"
+
+          if [[ -z "$latest_tag" ]]; then
+            echo 'No official repeater release tag was found.' >&2
+            exit 1
+          fi
+
+          echo "Latest official repeater release: $latest_tag"
+          echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
+
+          if git merge-base --is-ancestor "$latest_tag" HEAD; then
+            echo 'update=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'update=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge official repeater release
+        if: steps.release.outputs.update == 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-edit "$RELEASE_TAG"
+
+      - name: Set up build environment
+        if: steps.release.outputs.update == 'true'
+        uses: ./.github/actions/setup-build-environment
+
+      - name: Build representative repeater firmware
+        if: steps.release.outputs.update == 'true'
+        run: pio run -e Heltec_v3_repeater
+
+      - name: Publish patched release
+        if: steps.release.outputs.update == 'true'
+        run: git push origin HEAD:main
