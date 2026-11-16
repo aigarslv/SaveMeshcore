@@ -16,7 +16,7 @@ SaveMeshcore keeps these safety settings within fixed limits. On every boot, an 
 | `multi.acks` | Always `1`: one extra multi-ACK plus the normal ACK. |
 | `loop.detect` | `minimal`, `moderate`, or `strict`. A saved `off` is changed to `minimal`. |
 | `advert.interval` | Always `0`, disabling periodic zero-hop self-adverts. |
-| `flood.advert.interval` | `47` to `168` hours. A lower saved value, including `0`, is changed to `47`. |
+| `flood.advert.interval` | `0` (disabled) or `47` to `168` hours. Saved values from `1` through `46` are changed to `47`. |
 
 Allowed examples:
 
@@ -26,7 +26,8 @@ set path.hash.mode 2
 set multi.acks 1
 set loop.detect minimal
 set advert.interval 0
-set flood.advert.interval 47
+set flood.advert.interval 0    # disable flood adverts
+set flood.advert.interval 47   # minimum enabled interval
 ```
 
 These restrictions apply only to repeater firmware. The corresponding `get` commands remain available.

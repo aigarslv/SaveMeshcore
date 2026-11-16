@@ -51,6 +51,8 @@ TEST(RepeaterPrefsPolicy, LeavesAllowedValuesUnchanged) {
   EXPECT_FALSE(savemesh::repair(two_byte));
   TestPrefs three_byte{2, 1, 3, 0, 168};
   EXPECT_FALSE(savemesh::repair(three_byte));
+  TestPrefs flood_adverts_disabled{1, 1, 1, 0, 0};
+  EXPECT_FALSE(savemesh::repair(flood_adverts_disabled));
 }
 
 TEST(RepeaterPrefsPolicy, RepairsEveryStoredByteValue) {
@@ -79,7 +81,7 @@ TEST(RepeaterPrefsPolicy, RepairsEveryStoredByteValue) {
     p = base;
     p.flood_advert_interval = value;
     savemesh::repair(p);
-    EXPECT_EQ(p.flood_advert_interval, value < 47 ? 47 : value > 168 ? 168 : value);
+    EXPECT_EQ(p.flood_advert_interval, value == 0 ? 0 : value < 47 ? 47 : value > 168 ? 168 : value);
   }
 }
 
