@@ -1,3 +1,21 @@
+# SaveMeshcore repeater filtering patch
+
+This fork follows the latest official MeshCore repeater release and adds configurable packet filtering to repeater firmware. It does not follow the upstream development branches. New official `repeater-vX.Y.Z` releases are merged automatically while retaining these filters.
+
+The filter commands are available only in repeater firmware. Changes are saved in the repeater preferences and remain active after reboot. Run a command without `on` or `off` to show its current state.
+
+| Command | Default | Behavior |
+| --- | --- | --- |
+| `filter 1byte on` | Off | Stops forwarding 1-byte path-hash flood packets that have already traversed at least one hop. Zero-hop floods, direct packets, and floods using 2-byte or 3-byte path hashes are unaffected. |
+| `filter 1byte off` | | Disables the 1-byte flood filter. |
+| `filter 1byte` | | Shows whether the 1-byte flood filter is on or off. |
+| `filter data on` | On | Stops forwarding payload types `0x06` (`GRP_DATA`), `0x0C`–`0x0E` (reserved unsigned types), and `0x0F` (`RAW_CUSTOM`). |
+| `filter data off` | | Disables the data payload filter. |
+| `filter data` | | Shows whether the data payload filter is on or off. |
+
+> [!IMPORTANT]
+> The data filter is enabled by default, including after upgrading an existing repeater whose preferences do not yet contain this setting.
+
 ## About MeshCore
 
 MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
