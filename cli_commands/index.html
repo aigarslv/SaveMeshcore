@@ -951,6 +951,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#view-all-repeater-filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        View all repeater filters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#filter-flood-packets-with-1-byte-path-hashes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2642,6 +2653,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#view-all-repeater-filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        View all repeater filters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#filter-flood-packets-with-1-byte-path-hashes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3687,6 +3709,12 @@
 <p><strong>Default:</strong> <code>0</code></p>
 <p><strong>Note:</strong> the 'path.hash.mode' sets the low-level ID/hash encoding size used when the repeater adverts. This setting has no impact on what packet ID/hash size this repeater forwards, all sizes should be forwarded on firmware &gt;= 1.14. This feature was added in firmware 1.14</p>
 <p><strong>Temporary Note:</strong> adverts with ID/hash sizes of 2 or 3 bytes may have limited flood propagation in your network while this feature is new as v1.13.0 firmware and older will drop packets with multibyte path ID/hashes as only 1-byte hashes are supported. Consider your install base of firmware &gt;=1.14 has reached a criticality for effective network flooding before implementing higher ID/hash sizes. </p>
+<hr />
+<h4 id="view-all-repeater-filters">View all repeater filters</h4>
+<p><strong>Usage:</strong>
+- <code>filter</code></p>
+<p><strong>Example reply:</strong> <code>&gt; 1byte off, data on, public off</code></p>
+<p><strong>Note:</strong> Shows the state of every SaveMeshcore filter in one reply, so all of them can be checked with a single remote request.</p>
 <hr />
 <h4 id="filter-flood-packets-with-1-byte-path-hashes">Filter flood packets with 1-byte path hashes</h4>
 <p><strong>Usage:</strong>
