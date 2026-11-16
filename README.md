@@ -80,6 +80,8 @@ Ready-to-flash firmware for every repeater board is published on the [Releases p
 
 When MeshCore publishes a new official repeater release, the fork merges it, creates the matching tag, and builds all repeater boards automatically.
 
+GitHub switches off scheduled workflows in a public repository after 60 days without activity, and MeshCore sometimes goes 60 days between releases. To keep the daily check running, a monthly **Keepalive** workflow adds an empty commit if `main` has been quiet for 20 days or more. It also re-enables the update check if GitHub has already disabled it.
+
 ### Firmware upgrade compatibility
 
 The filter settings are stored in their own file, `/savemesh_prefs`, separate from the official `/prefs.json`. Official MeshCore firmware never reads or rewrites that file. You can install clean official firmware without erasing the device: all radio, identity, and region settings carry over, and the filters simply stop being applied. If you later reinstall SaveMeshcore, your saved filter choices, including `filter data off`, come back unchanged.
