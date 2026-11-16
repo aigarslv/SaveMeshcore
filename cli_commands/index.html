@@ -973,6 +973,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#filter-the-public-channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filter the Public channel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#view-or-change-this-nodes-loop-detection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2653,6 +2664,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#filter-the-public-channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filter the Public channel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#view-or-change-this-nodes-loop-detection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3681,6 +3703,14 @@
 - <code>filter data off</code></p>
 <p><strong>Default:</strong> <code>on</code></p>
 <p><strong>Note:</strong> When <code>on</code>, the repeater does not forward packets with payload type 0x06 (GRP_DATA), 0x0C to 0x0E (unsigned), or 0x0F (RAW_CUSTOM).</p>
+<hr />
+<h4 id="filter-the-public-channel">Filter the Public channel</h4>
+<p><strong>Usage:</strong>
+- <code>filter public</code>
+- <code>filter public on</code>
+- <code>filter public off</code></p>
+<p><strong>Default:</strong> <code>off</code></p>
+<p><strong>Note:</strong> When <code>on</code>, the repeater does not forward group messages (GRP_TXT and GRP_DATA) on the default Public channel. The repeater identifies the channel by checking the packet's MAC with the published Public channel key. It does not decrypt the messages, and other channels that share the Public channel's hash byte (<code>0x11</code>) are still forwarded.</p>
 <hr />
 <h4 id="view-or-change-this-nodes-loop-detection">View or change this node's loop detection</h4>
 <p><strong>Usage:</strong>
