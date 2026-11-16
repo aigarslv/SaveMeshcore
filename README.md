@@ -13,6 +13,38 @@ The filter commands are available only in repeater firmware. Changes are saved i
 | `filter data off` | | Disables the data payload filter. |
 | `filter data` | | Shows whether the data payload filter is on or off. |
 
+### CLI examples
+
+Enable both filters:
+
+```text
+filter 1byte on
+filter data on
+```
+
+Disable both filters:
+
+```text
+filter 1byte off
+filter data off
+```
+
+Check the current filter states without changing them:
+
+```text
+filter 1byte
+filter data
+```
+
+Example responses:
+
+```text
+OK - filter 1byte on
+OK - filter data off
+> filter 1byte on
+> filter data off
+```
+
 > [!IMPORTANT]
 > The data filter is enabled by default, including after upgrading an existing repeater whose preferences do not yet contain this setting.
 
