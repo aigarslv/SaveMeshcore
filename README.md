@@ -14,21 +14,26 @@ The filter commands are available only in repeater firmware. Changes are saved i
 | `filter data on` | On | Stops forwarding payload types `0x06` (`GRP_DATA`), `0x0C`–`0x0E` (reserved unsigned types), and `0x0F` (`RAW_CUSTOM`). |
 | `filter data off` | | Disables the data payload filter. |
 | `filter data` | | Shows whether the data payload filter is on or off. |
+| `filter public on` | Off | Stops forwarding group messages (`GRP_TXT` and `GRP_DATA`) on the default **Public** channel. |
+| `filter public off` | | Disables the Public channel filter. |
+| `filter public` | | Shows whether the Public channel filter is on or off. |
 
 ### CLI examples
 
-Enable both filters:
+Enable all filters:
 
 ```text
 filter 1byte on
 filter data on
+filter public on
 ```
 
-Disable both filters:
+Disable all filters:
 
 ```text
 filter 1byte off
 filter data off
+filter public off
 ```
 
 Check the current filter states without changing them:
@@ -36,6 +41,7 @@ Check the current filter states without changing them:
 ```text
 filter 1byte
 filter data
+filter public
 ```
 
 Example responses:
@@ -43,12 +49,28 @@ Example responses:
 ```text
 OK - filter 1byte on
 OK - filter data off
+OK - filter public on
 > filter 1byte on
 > filter data off
+> filter public on
 ```
+
+### How the Public channel filter works
+
+Group packets name their channel with a single hash byte, and many channels share each value. The Public channel's byte is `0x11`. Blocking that byte alone would also drop other channels that happen to use `0x11`.
+
+Instead, the repeater checks each packet's 2-byte MAC against the published Public channel key. A packet is dropped only when the MAC verifies, which proves it belongs to Public. Other channels sharing `0x11` are still forwarded. The repeater never decrypts the message, so it cannot read Public traffic. The Public key is not a secret: it is published in the MeshCore source and FAQ.
+
+The check runs only for group packets whose hash byte is `0x11`. Every other packet costs a single byte comparison.
 
 > [!IMPORTANT]
 > The data filter is enabled by default only when no saved `filter data` setting exists. After `filter data off` is saved, firmware updates from this fork preserve the off state.
+
+### Firmware releases
+
+Ready-to-flash firmware for every repeater board is published on the [Releases page](https://github.com/aigarslv/SaveMeshcore/releases). Each release is tagged `repeater-vX.Y.Z-savemesh`, where `vX.Y.Z` is the official MeshCore repeater version it is built from. For example, `repeater-v1.18.0-savemesh` is official repeater v1.18.0 with the SaveMeshcore filters.
+
+When MeshCore publishes a new official repeater release, the fork merges it, creates the matching tag, and builds all repeater boards automatically.
 
 ### Firmware upgrade compatibility
 

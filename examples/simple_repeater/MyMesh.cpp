@@ -466,6 +466,10 @@ bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
       return false;
     }
   }
+  if (_filter_prefs.filter_public && isPublicChannelPacket(packet)) {
+    MESH_DEBUG_PRINTLN("allowPacketForward: Public channel packet filtered");
+    return false;
+  }
   return true;
 }
 
@@ -1315,6 +1319,8 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
     handleFilterCommand("1byte", &command[12], _filter_prefs.filter_1byte, reply);
   } else if (memcmp(command, "filter data", 11) == 0 && (command[11] == 0 || command[11] == ' ')) {
     handleFilterCommand("data", &command[11], _filter_prefs.filter_data, reply);
+  } else if (memcmp(command, "filter public", 13) == 0 && (command[13] == 0 || command[13] == ' ')) {
+    handleFilterCommand("public", &command[13], _filter_prefs.filter_public, reply);
   } else if (memcmp(command, "discover.neighbors", 18) == 0) {
     const char* sub = command + 18;
     while (*sub == ' ') sub++;

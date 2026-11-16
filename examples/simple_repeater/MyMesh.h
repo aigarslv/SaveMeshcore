@@ -37,6 +37,7 @@
 #include <helpers/RoutingPolicy.h>
 #include "RateLimiter.h"
 #include "FilterPrefs.h"
+#include "ChannelMatch.h"
 
 #ifdef WITH_BRIDGE
 extern AbstractBridge* bridge;
