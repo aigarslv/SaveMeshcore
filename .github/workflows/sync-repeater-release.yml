@@ -15,6 +15,9 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      release_tag: ${{ steps.publish.outputs.release_tag }}
     steps:
       - name: Check out patched release branch
         uses: actions/checkout@v6
@@ -57,7 +60,7 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          pattern='filter_1byte|filter_data|filter 1byte|filter data'
+          pattern='filter_1byte|filter_data|filter_public|filter 1byte|filter data|filter public'
           if git grep -Ei "$pattern" "$RELEASE_TAG" -- src examples; then
             echo 'The upstream release appears to provide packet filters.' >&2
             echo 'Automatic synchronization stopped to avoid combining two filter implementations.' >&2
@@ -85,5 +88,27 @@ jobs:
         run: pio run -e Heltec_v3_repeater
 
       - name: Publish patched release
+        id: publish
         if: steps.release.outputs.update == 'true'
-        run: git push origin HEAD:main
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          release_tag="${RELEASE_TAG}-savemesh"
+          git push origin HEAD:main
+          git tag -a "$release_tag" -m "Official $RELEASE_TAG with SaveMeshcore filters"
+          git push origin "refs/tags/$release_tag"
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+  # Tags pushed with GITHUB_TOKEN do not start other workflows, so the release
+  # build is called directly here.
+  release:
+    needs: sync
+    if: needs.sync.outputs.published == 'true'
+    uses: ./.github/workflows/savemesh-release.yml
+    with:
+      tag: ${{ needs.sync.outputs.release_tag }}
+    permissions:
+      contents: write

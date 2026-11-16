@@ -519,6 +519,18 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 
 ---
 
+#### Filter the Public channel
+**Usage:**
+- `filter public`
+- `filter public on`
+- `filter public off`
+
+**Default:** `off`
+
+**Note:** When `on`, the repeater does not forward group messages (GRP_TXT and GRP_DATA) on the default Public channel. The repeater identifies the channel by checking the packet's MAC with the published Public channel key. It does not decrypt the messages, and other channels that share the Public channel's hash byte (`0x11`) are still forwarded.
+
+---
+
 #### View or change this node's loop detection
 **Usage:**
 - `get loop.detect`

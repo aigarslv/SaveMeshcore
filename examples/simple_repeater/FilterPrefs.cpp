@@ -43,6 +43,7 @@ bool FilterPrefs::loadFile(FILESYSTEM* fs, const char* filename, ConfigSerialize
 void FilterPrefs::sanitise() {
   filter_1byte = filter_1byte ? 1 : 0;
   filter_data = filter_data ? 1 : 0;
+  filter_public = filter_public ? 1 : 0;
 }
 
 void FilterPrefs::begin(FILESYSTEM* fs) {
