@@ -1283,6 +1283,38 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
       Serial.printf("\n");
     }
     reply[0] = 0;
+  } else if (memcmp(command, "filter 1byte", 12) == 0 && (command[12] == 0 || command[12] == ' ')) {
+    const char* arg = &command[12];
+    while (*arg == ' ') arg++;
+    if (strcmp(arg, "on") == 0) {
+      _prefs.filter_1byte = 1;
+      savePrefs();
+      strcpy(reply, "OK - filter 1byte on");
+    } else if (strcmp(arg, "off") == 0) {
+      _prefs.filter_1byte = 0;
+      savePrefs();
+      strcpy(reply, "OK - filter 1byte off");
+    } else if (*arg == 0) {
+      sprintf(reply, "> filter 1byte %s", _prefs.filter_1byte ? "on" : "off");
+    } else {
+      strcpy(reply, "Error, must be: on or off");
+    }
+  } else if (memcmp(command, "filter data", 11) == 0 && (command[11] == 0 || command[11] == ' ')) {
+    const char* arg = &command[11];
+    while (*arg == ' ') arg++;
+    if (strcmp(arg, "on") == 0) {
+      _prefs.filter_data = 1;
+      savePrefs();
+      strcpy(reply, "OK - filter data on");
+    } else if (strcmp(arg, "off") == 0) {
+      _prefs.filter_data = 0;
+      savePrefs();
+      strcpy(reply, "OK - filter data off");
+    } else if (*arg == 0) {
+      sprintf(reply, "> filter data %s", _prefs.filter_data ? "on" : "off");
+    } else {
+      strcpy(reply, "Error, must be: on or off");
+    }
   } else if (memcmp(command, "discover.neighbors", 18) == 0) {
     const char* sub = command + 18;
     while (*sub == ' ') sub++;
