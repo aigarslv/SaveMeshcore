@@ -60,6 +60,35 @@
 
 #define LAZY_CONTACTS_WRITE_DELAY    5000
 
+namespace {
+
+bool matchCommand(const char* command, const char* name, const char** arg) {
+  size_t len = strlen(name);
+  if (strncmp(command, name, len) != 0 || (command[len] != 0 && command[len] != ' ')) return false;
+  *arg = command + len;
+  while (**arg == ' ') (*arg)++;
+  return true;
+}
+
+bool parseUnsigned(const char* arg, uint16_t* value) {
+  if (*arg < '0' || *arg > '9') return false;
+  uint32_t result = 0;
+  while (*arg >= '0' && *arg <= '9') {
+    result = result * 10 + (*arg++ - '0');
+    if (result > UINT16_MAX) return false;
+  }
+  if (!StrHelper::isBlank(arg)) return false;
+  *value = (uint16_t)result;
+  return true;
+}
+
+bool matchesValue(const char* arg, const char* value) {
+  size_t len = strlen(value);
+  return strncmp(arg, value, len) == 0 && StrHelper::isBlank(arg + len);
+}
+
+}
+
 void MyMesh::putNeighbour(const mesh::Identity &id, uint32_t timestamp, float snr) {
 #if MAX_NEIGHBOURS // check if neighbours enabled
   // find existing neighbour, else use least recently updated
@@ -916,14 +945,16 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
   _prefs.bw = LORA_BW;
   _prefs.cr = LORA_CR;
   _prefs.tx_power_dbm = LORA_TX_POWER;
-  _prefs.advert_interval = 1;        // default to 2 minutes for NEW installs
-  _prefs.flood_advert_interval = 47; // 47 hours
+  _prefs.advert_interval = 0;        // local zero-hop adverts disabled by SaveMeshcore policy
+  _prefs.flood_advert_interval = 47; // minimum 47 hours
   _prefs.flood_max = 64;
   _prefs.flood_max_unscoped = 64;
   _prefs.flood_max_advert = 8;
   _prefs.interference_threshold = 0; // disabled
   _prefs.cad_enabled = 0;            // hardware CAD before TX (off by default; 'set cad on')
   _prefs.loop_detect = LOOP_DETECT_MINIMAL;
+  _prefs.path_hash_mode = 1;  // minimum 2-byte path hashes
+  _prefs.multi_acks = 1;
 
   // bridge defaults
   _prefs.bridge_enabled = 1;    // enabled
@@ -962,6 +993,7 @@ void MyMesh::begin(FILESYSTEM *fs) {
   _fs = fs;
   // load persisted prefs
   _cli.loadPrefs(_fs);
+  repairRepeaterPrefs();
   _filter_prefs.begin(_fs);
   acl.load(_fs, self_id);
   // TODO: key_store.begin();
@@ -1211,6 +1243,93 @@ void MyMesh::clearStats() {
   ((SimpleMeshTables *)getTables())->resetStats();
 }
 
+bool MyMesh::repairRepeaterPrefs() {
+  bool changed = false;
+
+  if (_prefs.path_hash_mode < 1) {
+    _prefs.path_hash_mode = 1;  // minimum: 2-byte path hashes
+    changed = true;
+  } else if (_prefs.path_hash_mode > 2) {
+    _prefs.path_hash_mode = 2;  // maximum: 3-byte path hashes
+    changed = true;
+  }
+  if (_prefs.multi_acks != 1) {
+    _prefs.multi_acks = 1;
+    changed = true;
+  }
+  if (_prefs.loop_detect < LOOP_DETECT_MINIMAL) {
+    _prefs.loop_detect = LOOP_DETECT_MINIMAL;
+    changed = true;
+  } else if (_prefs.loop_detect > LOOP_DETECT_STRICT) {
+    _prefs.loop_detect = LOOP_DETECT_STRICT;
+    changed = true;
+  }
+  if (_prefs.advert_interval != 0) {
+    _prefs.advert_interval = 0;
+    changed = true;
+  }
+  if (_prefs.flood_advert_interval < 47) {
+    _prefs.flood_advert_interval = 47;
+    changed = true;
+  } else if (_prefs.flood_advert_interval > 168) {
+    _prefs.flood_advert_interval = 168;
+    changed = true;
+  }
+
+  if (changed && !_cli.savePrefs(_fs)) {
+    MESH_DEBUG_PRINTLN("Unable to save repaired repeater preferences");
+  }
+  return changed;
+}
+
+bool MyMesh::handleProtectedPrefsCommand(uint32_t sender_timestamp, char* command, char* reply) {
+  const char* arg;
+  uint16_t value;
+
+  if (matchCommand(command, "set path.hash.mode", &arg)) {
+    if (!parseUnsigned(arg, &value) || value < 1 || value > 2) {
+      strcpy(reply, "Error: path.hash.mode must be 1 or 2");
+    } else {
+      _cli.handleCommand(sender_timestamp, command, reply);
+    }
+    return true;
+  }
+  if (matchCommand(command, "set multi.acks", &arg)) {
+    if (!parseUnsigned(arg, &value) || value != 1) {
+      strcpy(reply, "Error: multi.acks must be 1");
+    } else {
+      _cli.handleCommand(sender_timestamp, command, reply);
+    }
+    return true;
+  }
+  if (matchCommand(command, "set loop.detect", &arg)) {
+    if (!matchesValue(arg, "minimal") && !matchesValue(arg, "moderate")
+        && !matchesValue(arg, "strict")) {
+      strcpy(reply, "Error: loop.detect must be minimal, moderate or strict");
+    } else {
+      _cli.handleCommand(sender_timestamp, command, reply);
+    }
+    return true;
+  }
+  if (matchCommand(command, "set advert.interval", &arg)) {
+    if (!parseUnsigned(arg, &value) || value != 0) {
+      strcpy(reply, "Error: advert.interval must be 0");
+    } else {
+      _cli.handleCommand(sender_timestamp, command, reply);
+    }
+    return true;
+  }
+  if (matchCommand(command, "set flood.advert.interval", &arg)) {
+    if (!parseUnsigned(arg, &value) || value < 47 || value > 168) {
+      strcpy(reply, "Error: flood.advert.interval range is 47-168 hours");
+    } else {
+      _cli.handleCommand(sender_timestamp, command, reply);
+    }
+    return true;
+  }
+  return false;
+}
+
 void MyMesh::handleFilterCommand(const char* name, const char* arg, uint8_t& setting, char* reply) {
   while (*arg == ' ') arg++;
   if (*arg == 0) {
@@ -1280,6 +1399,8 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
     reply += 3;
     command += 3;
   }
+
+  if (handleProtectedPrefsCommand(sender_timestamp, command, reply)) return;
 
   // handle ACL related commands
   if (memcmp(command, "setperm ", 8) == 0) {   // format:  setperm {pubkey-hex} {permissions-int8}

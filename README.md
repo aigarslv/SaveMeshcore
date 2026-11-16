@@ -6,6 +6,31 @@ SaveMeshcore is for **repeater firmware only**. The patch changes only `examples
 
 The filter commands are available only in repeater firmware. Changes are saved immediately and remain active after reboot. Run a command without `on` or `off` to show its current state.
 
+### Enforced repeater settings
+
+SaveMeshcore keeps these safety settings within fixed limits. On every boot, an older or manually edited value outside the policy is repaired and saved before the radio and advertisement timers start. A CLI command outside the allowed range is rejected without changing the setting.
+
+| MeshCore setting | SaveMeshcore policy |
+| --- | --- |
+| `path.hash.mode` | `1` (2-byte paths) or `2` (3-byte paths). A saved `0` (1-byte) is changed to `1`; a saved `2` is left unchanged. |
+| `multi.acks` | Always `1`: one extra multi-ACK plus the normal ACK. |
+| `loop.detect` | `minimal`, `moderate`, or `strict`. A saved `off` is changed to `minimal`. |
+| `advert.interval` | Always `0`, disabling periodic zero-hop self-adverts. |
+| `flood.advert.interval` | `47` to `168` hours. A lower saved value, including `0`, is changed to `47`. |
+
+Allowed examples:
+
+```text
+set path.hash.mode 1
+set path.hash.mode 2
+set multi.acks 1
+set loop.detect minimal
+set advert.interval 0
+set flood.advert.interval 47
+```
+
+These restrictions apply only to repeater firmware. The corresponding `get` commands remain available.
+
 | Command | Default | Behavior |
 | --- | --- | --- |
 | `filter` | | Shows the state of all filters in one line, for example `> 1byte off, data on, public off`. |

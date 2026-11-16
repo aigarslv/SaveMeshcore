@@ -481,17 +481,15 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 - `set path.hash.mode <value>`
 
 **Parameters:**
-- `value`: Path hash size (0-2)
-  - `0`: 1 Byte hash size (256 unique ids)[64 max flood]
+- `value`: Path hash mode (`1` or `2`)
   - `1`: 2 Byte hash size (65,536 unique ids)[32 max flood]
   - `2`: 3 Byte hash size (16,777,216 unique ids)[21 max flood]
-  - `3`: DO NOT USE (Reserved) 
 
-**Default:** `0`
+**Default:** `1`
 
-**Note:** the 'path.hash.mode' sets the low-level ID/hash encoding size used when the repeater adverts. This setting has no impact on what packet ID/hash size this repeater forwards, all sizes should be forwarded on firmware >= 1.14. This feature was added in firmware 1.14
+**SaveMeshcore policy:** 1-byte mode (`0`) is not allowed. A saved `0` from older firmware is changed to `1` at boot. Mode `2` is preserved. CLI values outside `1-2` are rejected.
 
-**Temporary Note:** adverts with ID/hash sizes of 2 or 3 bytes may have limited flood propagation in your network while this feature is new as v1.13.0 firmware and older will drop packets with multibyte path ID/hashes as only 1-byte hashes are supported. Consider your install base of firmware >=1.14 has reached a criticality for effective network flooding before implementing higher ID/hash sizes. 
+**Note:** the 'path.hash.mode' sets the low-level ID/hash encoding size used when the repeater adverts. This setting has no impact on what packet ID/hash size this repeater forwards.
 
 ---
 
@@ -547,15 +545,14 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 - `set loop.detect <state>`
 
 **Parameters:**
-- `state`: 
-  - `off`: no loop detection is performed
+- `state`:
   - `minimal`: packets are dropped if repeater's ID/hash appears 4 or more times (1-byte), 2 or more (2-byte), 1 or more (3-byte)
   - `moderate`: packets are dropped if repeater's ID/hash appears 2 or more times (1-byte), 1 or more (2-byte), 1 or more (3-byte)
   - `strict`: packets are dropped if repeater's ID/hash appears 1 or more times (1-byte), 1 or more (2-byte), 1 or more (3-byte)
   
-**Default:** `off`
+**Default:** `minimal`
 
-**Note:** When it is enabled, repeaters will now reject flood packets which look like they are in a loop. This has been happening recently in some meshes when there is just a single 'bad' repeater firmware out there (probably some forked or custom firmware). If the payload is messed with, then forwarded, the same packet ends up causing a packet storm, repeated up to the max 64 hops. This feature was added in firmware 1.14
+**SaveMeshcore policy:** `off` is not allowed. A saved `off` value is changed to `minimal` at boot. CLI values are limited to `minimal`, `moderate`, or `strict`.
 
 **Example:** If preference is `loop.detect minimal`, and a 1-byte path size packet is received, the repeater will see if its own ID/hash is already in the path. If it's already encoded 4 times, it will reject the packet.  If the packet uses 2-byte path size, and repeater's own ID/hash is already encoded 2 times, it rejects. If the packet uses 3-byte path size, and the repeater's own ID/hash is already encoded 1 time, it rejects. 
 
@@ -686,9 +683,11 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 - `set multi.acks <state>`
 
 **Parameters:**
-- `state`: `0` (disable) or `1` (enable)
+- `state`: `1` (enabled)
 
-**Default:** `0`
+**Default:** `1`
+
+**SaveMeshcore policy:** Multi-ACK is always enabled. A saved value other than `1` is repaired at boot, and CLI values other than `1` are rejected.
 
 ---
 
@@ -698,9 +697,11 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 - `set flood.advert.interval <hours>`
 
 **Parameters:**
-- `hours`: Interval in hours (3-168)
+- `hours`: Interval in hours (`47-168`)
 
-**Default:** `47` (Repeater, Room Server) - `0`, disabled (Sensor)
+**Default:** `47` (Repeater)
+
+**SaveMeshcore policy:** Values below `47`, including disabled (`0`), are changed to `47` at boot. CLI values outside `47-168` are rejected.
 
 ---
 
@@ -710,14 +711,11 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 - `set advert.interval <minutes>`
 
 **Parameters:**
-- `minutes`: Interval in minutes rounded down to the nearest multiple of 2 (61 becomes 60) (60-240)
+- `minutes`: `0` (disabled)
 
-**Default:** `2` on a factory-fresh node, then `0` (disabled) once configured.
+**Default:** `0`
 
-**Note:** A new install ships with a 2 minute zero-hop advert interval. Saving
-any setting resets an interval below the 60 minute minimum to `0`, on the
-assumption that the node has now been deliberately configured. To keep zero-hop
-adverts running, set an explicit value in the 60-240 range.
+**SaveMeshcore policy:** Periodic zero-hop adverts are disabled. A saved non-zero value is changed to `0` at boot, and CLI values other than `0` are rejected.
 
 ---
 
