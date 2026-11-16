@@ -507,6 +507,18 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 
 ---
 
+#### Filter data payload types
+**Usage:**
+- `filter data`
+- `filter data on`
+- `filter data off`
+
+**Default:** `on`
+
+**Note:** When `on`, the repeater does not forward packets with payload type 0x06 (GRP_DATA), 0x0C to 0x0E (unsigned), or 0x0F (RAW_CUSTOM).
+
+---
+
 #### View or change this node's loop detection
 **Usage:**
 - `get loop.detect`

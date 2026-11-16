@@ -72,6 +72,7 @@ public:
   uint8_t loop_detect = 0;
   uint8_t cad_enabled = 0;      // hardware Channel Activity Detection before TX (boolean)
   uint8_t filter_1byte = 0;      // repeater filter, drop flood packets with 1-byte path hashes that already have hops (boolean)
+  uint8_t filter_data = 1;      // repeater filter, drop data payload types (boolean)
   uint8_t extra_sf[4];
 
 private:
@@ -187,6 +188,7 @@ private:
       def("f_max_uns", _parent->flood_max_unscoped);
       def("f_max_adv", _parent->flood_max_advert);
       def("loop", _parent->loop_detect);
+      def("f_data", _parent->filter_data);
       def("f_1byte", _parent->filter_1byte);
     }
   public:

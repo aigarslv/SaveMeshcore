@@ -459,6 +459,13 @@ bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
     MESH_DEBUG_PRINTLN("allowPacketForward: 1-byte path hash flood packet filtered");
     return false;
   }
+  if (_prefs.filter_data) {
+    uint8_t type = packet->getPayloadType();
+    if (type == PAYLOAD_TYPE_GRP_DATA || type == 0x0C || type == 0x0D || type == 0x0E || type == PAYLOAD_TYPE_RAW_CUSTOM) {
+      MESH_DEBUG_PRINTLN("allowPacketForward: data payload type filtered");
+      return false;
+    }
+  }
   return true;
 }
 

@@ -289,6 +289,22 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
       } else {
         strcpy(reply, "Error, must be: on or off");
       }
+    } else if (memcmp(command, "filter data", 11) == 0 && (command[11] == 0 || command[11] == ' ')) {
+      const char* arg = &command[11];
+      while (*arg == ' ') arg++;
+      if (strcmp(arg, "on") == 0) {
+        _prefs->filter_data = 1;
+        savePrefs();
+        strcpy(reply, "OK - filter data on");
+      } else if (strcmp(arg, "off") == 0) {
+        _prefs->filter_data = 0;
+        savePrefs();
+        strcpy(reply, "OK - filter data off");
+      } else if (*arg == 0) {
+        sprintf(reply, "> filter data %s", _prefs->filter_data ? "on" : "off");
+      } else {
+        strcpy(reply, "Error, must be: on or off");
+      }
     } else if (memcmp(command, "get ", 4) == 0) {
       handleGetCmd(sender_timestamp, command, reply);
     } else if (memcmp(command, "set ", 4) == 0) {
