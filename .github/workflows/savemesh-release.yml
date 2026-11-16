@@ -64,7 +64,10 @@ jobs:
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          if release=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" 2>/dev/null); then
+          release=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -c --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag)' \
+            | head -n 1)
+          if [[ -n "$release" ]]; then
             if [[ "$(jq -r .draft <<< "$release")" != 'true' ]]; then
               echo "$RELEASE_TAG is already published; published releases are immutable." >&2
               exit 1
@@ -182,7 +185,13 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           set -euo pipefail
-          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .id)
+          release_id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -r --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag) | .id' \
+            | head -n 1)
+          if [[ -z "$release_id" ]]; then
+            echo "Draft $RELEASE_TAG was not found after upload." >&2
+            exit 1
+          fi
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
             -F draft=false -F prerelease=false -f make_latest=true > /dev/null
           echo "Published ${RELEASE_TAG}."
