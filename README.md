@@ -46,7 +46,13 @@ OK - filter data off
 ```
 
 > [!IMPORTANT]
-> The data filter is enabled by default, including after upgrading an existing repeater whose preferences do not yet contain this setting.
+> The data filter is enabled by default only when no saved `filter data` setting exists. After `filter data off` is saved, firmware updates from this fork preserve the off state.
+
+### Firmware upgrade compatibility
+
+You can install clean official MeshCore firmware later without erasing the filesystem. Official firmware safely ignores this fork's `f_data` and `f_1byte` preference keys. If official firmware subsequently rewrites the preferences file, it may remove those unknown keys; reinstalling this fork after that would make the data filter default to on again.
+
+The automatic release updater checks each new release for upstream implementations using the same filter settings or commands. If it finds one, synchronization stops instead of combining the upstream and SaveMeshcore filters. You can then review the official implementation and move to clean upstream firmware without erasing the device.
 
 ## About MeshCore
 
