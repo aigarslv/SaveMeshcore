@@ -1,0 +1,72 @@
+name: Keepalive
+
+# GitHub disables scheduled workflows in a public repository after 60 days
+# without repository activity. Upstream sometimes goes 60+ days between
+# releases, so without this the daily "Sync upstream repeater release"
+# workflow could switch itself off just before a new release.
+#
+# Once a month this workflow:
+#   1. re-enables the sync workflow if GitHub already disabled it for inactivity
+#   2. adds an empty commit to main, but only if main has been quiet for 20+ days
+#
+# The empty commit is pushed with GITHUB_TOKEN, so it does not start the build
+# workflows.
+
+on:
+  schedule:
+    - cron: '23 4 1 * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Add the keepalive commit even if main is recent'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+# Shares the sync workflow's group so the two never push to main at the same time.
+concurrency:
+  group: sync-upstream-repeater-release
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Re-enable the sync workflow if it was disabled for inactivity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          state=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/sync-repeater-release.yml" --jq .state)
+          echo "Sync workflow state: $state"
+          if [[ "$state" == "disabled_inactivity" ]]; then
+            gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/sync-repeater-release.yml/enable"
+            echo "Re-enabled the sync workflow."
+          fi
+
+      - name: Add a keepalive commit if main has been quiet
+        shell: bash
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          age_days=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "Last commit on main is ${age_days} day(s) old."
+          if [[ "$FORCE" != "true" && "$age_days" -lt 20 ]]; then
+            echo "Recent activity found. No keepalive commit needed."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit --allow-empty -m "chore: keepalive (last commit was ${age_days} day(s) old)"
+          git push origin HEAD:main
+          echo "Pushed a keepalive commit."
