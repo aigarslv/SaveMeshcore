@@ -495,6 +495,18 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 
 ---
 
+#### Filter flood packets with 1-byte path hashes
+**Usage:**
+- `filter 1byte`
+- `filter 1byte on`
+- `filter 1byte off`
+
+**Default:** `off`
+
+**Note:** When `on`, the repeater does not forward flood packets that use 1-byte path hashes and have already traversed at least one hop. Flood packets with 2-byte or 3-byte path hashes, zero-hop packets (no path yet), and direct-routed packets are still forwarded.
+
+---
+
 #### View or change this node's loop detection
 **Usage:**
 - `get loop.detect`

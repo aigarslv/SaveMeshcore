@@ -455,6 +455,10 @@ bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
       return false;
     }
   }
+  if (_prefs.filter_1byte && packet->isRouteFlood() && packet->getPathHashSize() == 1 && packet->getPathHashCount() > 0) {
+    MESH_DEBUG_PRINTLN("allowPacketForward: 1-byte path hash flood packet filtered");
+    return false;
+  }
   return true;
 }
 
