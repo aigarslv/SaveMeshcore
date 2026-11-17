@@ -3,6 +3,7 @@
 #include "ForwardFilter.h"
 #include "RepeaterPrefsPolicy.h"
 #include "ChannelMatch.h"
+#include "CliParse.h"
 
 using namespace mesh;
 
@@ -152,6 +153,63 @@ TEST(PublicChannelFilter, RouteDoesNotChangeChannelIdentity) {
     p.header = route | (PAYLOAD_TYPE_GRP_TXT << PH_TYPE_SHIFT);
     EXPECT_TRUE(isPublicChannelPacket(&p));
   }
+}
+
+// ── CLI parsing ─────────────────────────────────────────────────────────────
+
+TEST(CliParse, ParseOnOffAcceptsCaseAndTrailingBlanks) {
+  uint8_t v = 7;
+  for (const char* on : {"on", "ON", "On", "on ", "on  ", "on\r", "on\r\n", "on\t"}) {
+    v = 7;
+    EXPECT_TRUE(savemesh::parseOnOff(on, &v)) << "'" << on << "'";
+    EXPECT_EQ(v, 1) << "'" << on << "'";
+  }
+  for (const char* off : {"off", "OFF", "Off", "off ", "off\r\n"}) {
+    v = 7;
+    EXPECT_TRUE(savemesh::parseOnOff(off, &v)) << "'" << off << "'";
+    EXPECT_EQ(v, 0) << "'" << off << "'";
+  }
+}
+
+TEST(CliParse, ParseOnOffRejectsEverythingElse) {
+  uint8_t v = 7;
+  for (const char* bad : {"", " ", "1", "0", "yes", "no", "onn", "o", "of", "offf",
+                          "on x", "on,", "true", "enable", "ofF!", "\r"}) {
+    EXPECT_FALSE(savemesh::parseOnOff(bad, &v)) << "'" << bad << "'";
+    EXPECT_EQ(v, 7) << "value must be untouched for '" << bad << "'";
+  }
+}
+
+TEST(CliParse, ParseUnsignedIsStrict) {
+  uint16_t v = 999;
+  EXPECT_TRUE(savemesh::parseUnsigned("0", &v));     EXPECT_EQ(v, 0);
+  EXPECT_TRUE(savemesh::parseUnsigned("47", &v));    EXPECT_EQ(v, 47);
+  EXPECT_TRUE(savemesh::parseUnsigned("168  ", &v)); EXPECT_EQ(v, 168);
+  EXPECT_TRUE(savemesh::parseUnsigned("65535", &v)); EXPECT_EQ(v, 65535);
+  for (const char* bad : {"", " ", "abc", "-1", "+1", "1x", "1 2", "0x10", "65536", "99999999999999"}) {
+    EXPECT_FALSE(savemesh::parseUnsigned(bad, &v)) << "'" << bad << "'";
+  }
+}
+
+TEST(CliParse, MatchCommandRequiresWholeName) {
+  const char* arg = nullptr;
+  EXPECT_TRUE(savemesh::matchCommand("set multi.acks 1", "set multi.acks", &arg));
+  EXPECT_STREQ(arg, "1");
+  EXPECT_TRUE(savemesh::matchCommand("set multi.acks", "set multi.acks", &arg));
+  EXPECT_STREQ(arg, "");
+  EXPECT_FALSE(savemesh::matchCommand("set multi.acksx 1", "set multi.acks", &arg));
+  EXPECT_FALSE(savemesh::matchCommand("xset multi.acks 1", "set multi.acks", &arg));
+  EXPECT_FALSE(savemesh::matchCommand("set multi", "set multi.acks", &arg));
+  EXPECT_FALSE(savemesh::matchCommand("set advert.intervalx 0", "set advert.interval", &arg));
+}
+
+TEST(CliParse, MatchesValueRequiresWholeWord) {
+  EXPECT_TRUE(savemesh::matchesValue("minimal", "minimal"));
+  EXPECT_TRUE(savemesh::matchesValue("minimal  ", "minimal"));
+  EXPECT_FALSE(savemesh::matchesValue("minimal-junk", "minimal"));
+  EXPECT_FALSE(savemesh::matchesValue("minimalx", "minimal"));
+  EXPECT_FALSE(savemesh::matchesValue("min", "minimal"));
+  EXPECT_FALSE(savemesh::matchesValue("", "strict"));
 }
 
 int main(int argc, char** argv) {

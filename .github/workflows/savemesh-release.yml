@@ -36,6 +36,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
       targets: ${{ steps.targets.outputs.targets }}
+      complete: ${{ steps.draft.outputs.complete }}
     steps:
       - name: Resolve release tag
         id: tag
@@ -98,8 +99,32 @@ jobs:
           echo "Repeater targets: $count"
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
+      # A retry must not rebuild everything when the draft already holds the
+      # manifest (uploaded last) and at least one file for every target.
+      - name: Check whether an existing draft is already complete
+        id: draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          TARGETS_JSON: ${{ steps.targets.outputs.targets }}
+        run: |
+          set -euo pipefail
+          names=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -r --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag and .draft) | .assets[].name')
+          complete=false
+          if grep -qx 'SHA256SUMS.txt' <<< "$names"; then
+            complete=true
+            while read -r target; do
+              if ! grep -q "^${target}-" <<< "$names"; then complete=false; fi
+            done < <(jq -r '.[]' <<< "$TARGETS_JSON")
+          fi
+          echo "Draft complete: $complete"
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+
   build:
     needs: prepare
+    if: needs.prepare.outputs.complete != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -129,17 +154,20 @@ jobs:
 
   release:
     needs: [prepare, build]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && needs.prepare.outputs.complete == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download all firmware
+        if: needs.prepare.outputs.complete != 'true'
         uses: actions/download-artifact@v8
         with:
           merge-multiple: true
           path: out
 
       - name: Verify every target and create manifest
+        if: needs.prepare.outputs.complete != 'true'
         shell: bash
         env:
           TARGETS_JSON: ${{ needs.prepare.outputs.targets }}
@@ -164,19 +192,53 @@ jobs:
           print(f'Verified {len(targets)} targets and {len(files)} firmware files.')
           PY
 
-      # Use a draft as the upload transaction. If uploading fails, the draft
-      # remains unpublished and the daily sync retries it on the next run.
-      - name: Upload complete release as draft
-        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          name: SaveMeshcore Repeater Firmware ${{ needs.prepare.outputs.version }}
-          draft: true
-          make_latest: false
-          body: |
-            Official MeshCore repeater firmware ${{ needs.prepare.outputs.version }} with the SaveMeshcore filters (`filter 1byte`, `filter data`, `filter public`).
-            See the README for commands, enforced settings, and defaults. Repeater firmware only.
-          files: out/*
+      # Use a draft as the upload transaction. Only missing assets are
+      # uploaded, and the manifest goes last so its presence marks the draft
+      # as complete. A failed run leaves an unpublished draft for the retry.
+      - name: Upload missing assets to draft
+        if: needs.prepare.outputs.complete != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_NAME: SaveMeshcore Repeater Firmware ${{ needs.prepare.outputs.version }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          release=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -c --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag and .draft)' | head -n 1)
+          if [[ -z "$release" ]]; then
+            body="Official MeshCore repeater firmware ${RELEASE_VERSION} with the SaveMeshcore filters (\`filter 1byte\`, \`filter data\`, \`filter public\`).
+          See the README for commands, enforced settings, and defaults. Repeater firmware only."
+            release=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/releases" \
+              -f tag_name="$RELEASE_TAG" -f name="$RELEASE_NAME" -f body="$body" \
+              -F draft=true -F make_latest=false)
+          fi
+          release_id=$(jq -r .id <<< "$release")
+          existing=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" --jq '.[].name')
+
+          upload() {
+            local file="$1" name
+            name=$(basename "$file")
+            if grep -qxF "$name" <<< "$existing"; then return 0; fi
+            for attempt in 1 2 3 4 5; do
+              if gh api -X POST "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=${name}" \
+                  -H 'Content-Type: application/octet-stream' --input "$file" > /dev/null; then
+                sleep 1
+                return 0
+              fi
+              echo "Upload of $name failed (attempt $attempt); retrying." >&2
+              sleep $((attempt * 10))
+            done
+            echo "Giving up on $name." >&2
+            return 1
+          }
+
+          for file in out/*; do
+            [[ "$(basename "$file")" == 'SHA256SUMS.txt' ]] && continue
+            upload "$file"
+          done
+          upload out/SHA256SUMS.txt
 
       - name: Publish verified release
         shell: bash

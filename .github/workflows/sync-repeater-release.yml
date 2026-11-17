@@ -111,8 +111,49 @@ jobs:
         shell: bash
         run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
 
-  publish:
+  validate-builds:
+    # One target per platform family (ESP32, nRF52, RP2040, STM32) so a merge
+    # that breaks a non-ESP32 build is caught before main is updated.
     needs: validate
+    if: needs.validate.outputs.update == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env:
+          - ThinkNode_M8_repeater
+          - RAK_4631_repeater
+          - PicoW_repeater
+          - wio-e5-mini_repeater
+    steps:
+      - name: Check out base commit without write credentials
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.base_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Merge the official release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/meshcore-dev/MeshCore.git
+          git fetch --force upstream "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-edit "$RELEASE_TAG"
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-environment
+
+      - name: Build ${{ matrix.env }}
+        run: pio run -e ${{ matrix.env }}
+
+  publish:
+    needs: [validate, validate-builds]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && (needs.validate-builds.result == 'success' || needs.validate-builds.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -170,6 +211,18 @@ jobs:
           set -euo pipefail
           release_tag="${UPSTREAM_TAG}-savemesh"
           echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+          # Any published SaveMeshcore release of this upstream version
+          # (-savemesh or -savemesh.N) means there is nothing to do.
+          pattern="^$(printf '%s' "$UPSTREAM_TAG" | sed 's/[.]/\\./g')-savemesh(\\.[0-9]+)?$"
+          published=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -r --arg re "$pattern" '.[] | select((.draft | not) and (.tag_name | test($re))) | .tag_name' \
+            | head -n 1)
+          if [[ -n "$published" ]]; then
+            echo "$UPSTREAM_TAG already has published release $published."
+            echo 'needed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           if ! git ls-remote --exit-code --tags origin "refs/tags/$release_tag" > /dev/null; then
             git config user.name 'github-actions[bot]'
