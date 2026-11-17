@@ -40,6 +40,7 @@
 #include "ChannelMatch.h"
 #include "ForwardFilter.h"
 #include "RepeaterPrefsPolicy.h"
+#include "CliParse.h"
 
 #ifdef WITH_BRIDGE
 extern AbstractBridge* bridge;

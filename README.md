@@ -32,6 +32,8 @@ set flood.advert.interval 47   # minimum enabled interval
 
 These restrictions apply only to repeater firmware. The corresponding `get` commands remain available.
 
+The full SaveMeshcore command reference is in [docs/savemeshcore_cli.md](./docs/savemeshcore_cli.md). The upstream [CLI reference](./docs/cli_commands.md) is left unchanged so official releases merge cleanly; where they disagree, the SaveMeshcore page applies.
+
 | Command | Default | Behavior |
 | --- | --- | --- |
 | `filter` | | Shows the state of all filters in one line, for example `> 1byte off, data on, public off`. |
